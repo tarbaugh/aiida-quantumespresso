@@ -25,6 +25,7 @@ howto/relax_structure
 howto/run_ph
 howto/run_pwbands
 howto/run_pdos
+howto/run_conductivity
 howto/customize_inputs
 ```
 

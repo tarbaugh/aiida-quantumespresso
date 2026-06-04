@@ -1010,3 +1010,46 @@ def generate_workchain_pdos(generate_workchain, generate_inputs_pw, fixture_code
         return generate_workchain(entry_point, inputs)
 
     return _generate_workchain_pdos
+
+
+@pytest.fixture
+def generate_workchain_conductivity(generate_workchain, generate_inputs_pw, fixture_code):
+    """Generate an instance of a `ConductivityWorkChain`."""
+
+    def _generate_workchain_conductivity():
+        from aiida.orm import Bool, Dict
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.conductivity'
+
+        scf_pw_inputs = generate_inputs_pw()
+        kpoints = scf_pw_inputs.pop('kpoints')
+        structure = scf_pw_inputs.pop('structure')
+        scf = {'pw': scf_pw_inputs, 'kpoints': kpoints}
+
+        nscf_pw_inputs = generate_inputs_pw()
+        nscf_pw_inputs.pop('kpoints')
+        nscf_pw_inputs.pop('structure')
+        nscf_pw_inputs['parameters']['CONTROL']['calculation'] = 'nscf'
+        nscf_pw_inputs['parameters']['SYSTEM']['occupations'] = 'tetrahedra'
+        # NB: contrary to the `PdosWorkChain`, `nosym` is intentionally not set for the conductivity NSCF.
+        nscf = {'pw': nscf_pw_inputs, 'kpoints': kpoints}
+
+        boltztrap = {
+            'code': fixture_code('quantumespresso.boltztrap'),
+            'parameters': Dict({'interpolate': {'multiplier': 5}, 'integrate': {'temperature': '300:800:50'}}),
+            'metadata': {'options': get_default_options()},
+        }
+
+        inputs = {
+            'structure': structure,
+            'scf': scf,
+            'nscf': nscf,
+            'boltztrap': boltztrap,
+            'dry_run': Bool(True),
+        }
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_conductivity

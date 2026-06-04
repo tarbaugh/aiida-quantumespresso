@@ -1,0 +1,84 @@
+boltztrap:
+  code: test.quantumespresso.boltztrap
+  metadata:
+    options:
+      max_wallclock_seconds: 3600
+      resources:
+        num_machines: 1
+      withmpi: false
+  parameters:
+    integrate:
+      temperature: 300:800:50
+    interpolate:
+      emax: 0.4
+      emin: -0.4
+      multiplier: 5
+clean_workdir: false
+nbands_factor: 2.0
+nscf:
+  kpoints_distance: 0.1
+  kpoints_force_parity: false
+  max_iterations: 5
+  pw:
+    code: test.quantumespresso.pw
+    metadata:
+      options:
+        max_wallclock_seconds: 43200
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: true
+    parameters:
+      CONTROL:
+        calculation: nscf
+        etot_conv_thr: 2.0e-05
+        forc_conv_thr: 0.0001
+        restart_mode: from_scratch
+        tprnfor: true
+        tstress: true
+      ELECTRONS:
+        conv_thr: 4.0e-10
+        electron_maxstep: 80
+        mixing_beta: 0.4
+      SYSTEM:
+        ecutrho: 240.0
+        ecutwfc: 30.0
+        nosym: false
+        occupations: tetrahedra_opt
+    pseudos:
+      Si: Si<md5=57fa15d98af99972c7b7aa5c179b0bb8>
+scf:
+  kpoints_distance: 0.15
+  kpoints_force_parity: false
+  max_iterations: 5
+  pw:
+    code: test.quantumespresso.pw
+    metadata:
+      options:
+        max_wallclock_seconds: 43200
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: true
+    parameters:
+      CONTROL:
+        calculation: scf
+        etot_conv_thr: 2.0e-05
+        forc_conv_thr: 0.0001
+        restart_mode: from_scratch
+        tprnfor: true
+        tstress: true
+      ELECTRONS:
+        conv_thr: 4.0e-10
+        electron_maxstep: 80
+        mixing_beta: 0.4
+      SYSTEM:
+        degauss: 0.02
+        ecutrho: 240.0
+        ecutwfc: 30.0
+        nosym: false
+        occupations: smearing
+        smearing: cold
+    pseudos:
+      Si: Si<md5=57fa15d98af99972c7b7aa5c179b0bb8>
+structure: Si2

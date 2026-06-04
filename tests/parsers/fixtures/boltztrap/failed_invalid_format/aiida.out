@@ -1,0 +1,5 @@
+INFO: Reading DFT data from bt2_input
+INFO: System with 2 atoms
+INFO: Interpolating bands with a multiplier of 5
+INFO: Computing the Onsager transport coefficients
+INFO: Writing interpolation.trace interpolation.condtens interpolation.halltens

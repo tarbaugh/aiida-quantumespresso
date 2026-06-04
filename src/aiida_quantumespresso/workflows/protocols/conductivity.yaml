@@ -1,0 +1,61 @@
+default_inputs:
+    clean_workdir: False
+    nbands_factor: 2.0
+    scf:
+        pw:
+            parameters:
+                CONTROL:
+                    restart_mode: from_scratch
+    nscf:
+        kpoints_distance: 0.10
+        pw:
+            parameters:
+                CONTROL:
+                    calculation: nscf
+                    restart_mode: from_scratch
+                SYSTEM:
+                    occupations: tetrahedra_opt
+                    # NB: `nosym` is intentionally *not* set: BoltzTraP2 expands the irreducible k-point set to the
+                    # full Brillouin zone using the crystal symmetry, so the NSCF must preserve it.
+    boltztrap:
+        parameters:
+            interpolate:
+                multiplier: 5
+                emin: -0.4  # Hartree, relative to the Fermi level
+                emax: 0.4   # Hartree, relative to the Fermi level
+            integrate:
+                temperature: '300:800:50'  # minT:maxT:stepT in Kelvin
+        metadata:
+            options:
+                max_wallclock_seconds: 3600  # One hour
+                withmpi: False
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to perform an electrical-conductivity calculation at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to perform an electrical-conductivity calculation at high precision at higher computational cost.'
+        nscf:
+            kpoints_distance: 0.05
+        boltztrap:
+            parameters:
+                interpolate:
+                    multiplier: 10
+                    emin: -0.6
+                    emax: 0.6
+    fast:
+        description: 'Protocol to perform an electrical-conductivity calculation at low precision at minimal computational cost for testing purposes.'
+        nscf:
+            kpoints_distance: 0.30
+        boltztrap:
+            parameters:
+                interpolate:
+                    multiplier: 3
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema:
+    scf: &pw_base_meta
+        meta_parameters:
+            conv_thr_per_atom:
+            etot_conv_thr_per_atom:
+        pseudo_family:
+    nscf: *pw_base_meta

@@ -1,0 +1,20 @@
+output_parameters:
+  n_chemical_potentials: 2
+  n_temperatures: 2
+  relaxation_time_approximation: The electrical conductivity and electronic thermal
+    conductivity are divided by the relaxation time tau (constant relaxation-time
+    approximation). Multiply by a relaxation time to obtain absolute values.
+  temperatures:
+  - 300.0
+  - 600.0
+  units:
+    carrier_concentration: e/uc
+    chemical_potential: Ry
+    dos_fermi: 1/(Ha*uc)
+    electrical_conductivity: 1/(ohm*m*s)
+    hall_coefficient: m^3/C
+    seebeck: V/K
+    specific_heat: J/(mol*K)
+    susceptibility: m^3/mol
+    temperature: K
+    thermal_conductivity: W/(m*K*s)

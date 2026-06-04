@@ -44,6 +44,7 @@ Documentation = 'https://aiida-quantumespresso.readthedocs.io'
 aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 
 [project.entry-points.'aiida.calculations']
+'quantumespresso.boltztrap' = 'aiida_quantumespresso.calculations.boltztrap:BoltztrapCalculation'
 'quantumespresso.cp' = 'aiida_quantumespresso.calculations.cp:CpCalculation'
 'quantumespresso.create_kpoints_from_distance' = 'aiida_quantumespresso.calculations.functions.create_kpoints_from_distance:create_kpoints_from_distance'
 'quantumespresso.create_magnetic_configuration' = 'aiida_quantumespresso.calculations.functions.create_magnetic_configuration:create_magnetic_configuration'
@@ -69,6 +70,7 @@ aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 'quantumespresso.hubbard_structure' = 'aiida_quantumespresso.data.hubbard_structure:HubbardStructureData'
 
 [project.entry-points.'aiida.parsers']
+'quantumespresso.boltztrap' = 'aiida_quantumespresso.parsers.boltztrap:BoltztrapParser'
 'quantumespresso.cp' = 'aiida_quantumespresso.parsers.cp:CpParser'
 'quantumespresso.dos' = 'aiida_quantumespresso.parsers.dos:DosParser'
 'quantumespresso.matdyn' = 'aiida_quantumespresso.parsers.matdyn:MatdynParser'
@@ -98,6 +100,7 @@ aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 'quantumespresso.q2r.base' = 'aiida_quantumespresso.workflows.q2r.base:Q2rBaseWorkChain'
 'quantumespresso.matdyn.base' = 'aiida_quantumespresso.workflows.matdyn.base:MatdynBaseWorkChain'
 'quantumespresso.pdos' = 'aiida_quantumespresso.workflows.pdos:PdosWorkChain'
+'quantumespresso.conductivity' = 'aiida_quantumespresso.workflows.conductivity:ConductivityWorkChain'
 'quantumespresso.bands.base' = 'aiida_quantumespresso.workflows.bands.base:BandsBaseWorkChain'
 'quantumespresso.neb.base' = 'aiida_quantumespresso.workflows.neb.base:NebBaseWorkChain'
 
@@ -119,6 +122,9 @@ tests = [
 ]
 pre-commit = [
     'pre-commit>=4.3.0',
+]
+transport = [
+    'BoltzTraP2',
 ]
 
 [dependency-groups]

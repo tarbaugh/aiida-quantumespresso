@@ -5,6 +5,7 @@
 ```{toctree}
 :maxdepth: 1
 
+boltztrap
 cp
 dos
 matdyn
