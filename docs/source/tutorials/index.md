@@ -16,6 +16,7 @@ Before you get started, make sure that you have:
 
 magnetism
 hubbard
+conductivity
 ```
 
 :::{card}
@@ -75,5 +76,25 @@ Learn how to define the Hubbard parameters along with your structure, and run a 
 :widths: 50 50
 * - {fa}`fa-sharp fa-regular fa-clock` 30 min
   - {{ aiida_logo }} [Beginner]{.aiida-green}
+::::
+:::
+
+
+:::{card}
+:class-header: panel-header-text
+:class-footer: tutor-footer
+:link: tutorials-conductivity
+:link-type: ref
+:margin: 4
+
+{fa}`fa-solid fa-bolt` Electrical conductivity
+^^^
+Learn how to compute the electrical conductivity, Seebeck coefficient and electronic thermal conductivity of a material by combining Quantum ESPRESSO with BoltzTraP2, and how to plot the resulting transport coefficients.
++++
+::::{list-table}
+:class: footer-table
+:widths: 50 50
+* - {fa}`fa-sharp fa-regular fa-clock` 30 min
+  - {{ aiida_logo }} [Intermediate]{.aiida-orange}
 ::::
 :::

@@ -111,6 +111,9 @@ myst_substitutions = {
     'StructureData': '{class}`~aiida.orm.StructureData`',
     'aiida_hubbard': '[`aiida-hubbard`](https://aiida-hubbard.readthedocs.io/en/latest/)',
     'HubbardStructureData': '{class}`~aiida_quantumespresso.data.hubbard_structure.HubbardStructureData`',
+    'ConductivityWorkChain': '{class}`~aiida_quantumespresso.workflows.conductivity.ConductivityWorkChain`',
+    'BoltztrapCalculation': '{class}`~aiida_quantumespresso.calculations.boltztrap.BoltztrapCalculation`',
+    'ElectronicType': '{class}`~aiida_quantumespresso.common.types.ElectronicType`',
 }
 
 # -- Options for HTML output ----------------------------------------------
