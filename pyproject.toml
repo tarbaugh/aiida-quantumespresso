@@ -44,6 +44,7 @@ Documentation = 'https://aiida-quantumespresso.readthedocs.io'
 aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 
 [project.entry-points.'aiida.calculations']
+'quantumespresso.ase' = 'aiida_quantumespresso.calculations.ase:AseCalculation'
 'quantumespresso.boltztrap' = 'aiida_quantumespresso.calculations.boltztrap:BoltztrapCalculation'
 'quantumespresso.cp' = 'aiida_quantumespresso.calculations.cp:CpCalculation'
 'quantumespresso.create_kpoints_from_distance' = 'aiida_quantumespresso.calculations.functions.create_kpoints_from_distance:create_kpoints_from_distance'
@@ -71,6 +72,7 @@ aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 'quantumespresso.hubbard_structure' = 'aiida_quantumespresso.data.hubbard_structure:HubbardStructureData'
 
 [project.entry-points.'aiida.parsers']
+'quantumespresso.ase' = 'aiida_quantumespresso.parsers.ase:AseParser'
 'quantumespresso.boltztrap' = 'aiida_quantumespresso.parsers.boltztrap:BoltztrapParser'
 'quantumespresso.cp' = 'aiida_quantumespresso.parsers.cp:CpParser'
 'quantumespresso.dos' = 'aiida_quantumespresso.parsers.dos:DosParser'

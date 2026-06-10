@@ -1,0 +1,12 @@
+output_parameters:
+  calculator:
+    callable: EMT
+    module: ase.calculators.emt
+  energy: 0.005492657083090435
+  energy_units: eV
+  forces_units: eV/Angstrom
+  max_force: 0.37947851142683353
+  pressure: -0.5763444932083174
+  pressure_units: GPa
+  stress_units: GPa
+  task: energy
