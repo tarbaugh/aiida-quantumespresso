@@ -1,0 +1,41 @@
+default_inputs:
+    clean_workdir: False
+    scf:
+        pw:
+            parameters:
+                CONTROL:
+                    restart_mode: from_scratch
+    q2r:
+        q2r:
+            parameters:
+                INPUT:
+                    zasr: crystal
+            metadata:
+                options:
+                    max_wallclock_seconds: 3600  # One hour
+                    withmpi: True
+    matdyn:
+        matdyn:
+            parameters:
+                INPUT:
+                    asr: crystal
+            metadata:
+                options:
+                    max_wallclock_seconds: 3600  # One hour
+                    withmpi: True
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to compute the phonon band structure at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to compute the phonon band structure at high precision at higher computational cost.'
+    fast:
+        description: 'Protocol to compute the phonon band structure at low precision at minimal computational cost for testing purposes.'
+        bands_kpoints_distance: 0.1
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema:
+    scf:
+        meta_parameters:
+            conv_thr_per_atom:
+            etot_conv_thr_per_atom:
+        pseudo_family:

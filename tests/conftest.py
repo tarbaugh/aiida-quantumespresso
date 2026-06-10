@@ -1097,3 +1097,62 @@ def generate_workchain_epsilon(generate_workchain, generate_inputs_pw, fixture_c
         return generate_workchain(entry_point, inputs)
 
     return _generate_workchain_epsilon
+
+
+@pytest.fixture
+def generate_workchain_phonon_bands(generate_workchain, generate_inputs_pw, generate_kpoints_mesh, fixture_code):
+    """Generate an instance of a `PhononBandsWorkChain`."""
+
+    def _generate_workchain_phonon_bands(with_bands_kpoints=True):
+        import numpy as np
+        from aiida.orm import Bool, Dict, KpointsData
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.phonon_bands'
+
+        scf_pw_inputs = generate_inputs_pw()
+        kpoints = scf_pw_inputs.pop('kpoints')
+        structure = scf_pw_inputs.pop('structure')
+        scf = {'pw': scf_pw_inputs, 'kpoints': kpoints}
+
+        ph = {
+            'ph': {
+                'code': fixture_code('quantumespresso.ph'),
+                'parameters': Dict({'INPUTPH': {'tr2_ph': 1.0e-16}}),
+                'metadata': {'options': get_default_options()},
+            },
+            'qpoints': generate_kpoints_mesh(2),
+        }
+        q2r = {
+            'q2r': {
+                'code': fixture_code('quantumespresso.q2r'),
+                'parameters': Dict({'INPUT': {'zasr': 'crystal'}}),
+                'metadata': {'options': get_default_options()},
+            }
+        }
+        matdyn = {
+            'matdyn': {
+                'code': fixture_code('quantumespresso.matdyn'),
+                'parameters': Dict({'INPUT': {'asr': 'crystal'}}),
+                'metadata': {'options': get_default_options()},
+            }
+        }
+
+        inputs = {
+            'structure': structure,
+            'scf': scf,
+            'ph': ph,
+            'q2r': q2r,
+            'matdyn': matdyn,
+            'dry_run': Bool(True),
+        }
+
+        if with_bands_kpoints:
+            bands_kpoints = KpointsData()
+            bands_kpoints.set_kpoints(np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.5]]))
+            inputs['bands_kpoints'] = bands_kpoints
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_phonon_bands

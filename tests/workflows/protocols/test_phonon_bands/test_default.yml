@@ -1,0 +1,78 @@
+clean_workdir: false
+matdyn:
+  matdyn:
+    code: test.quantumespresso.matdyn
+    metadata:
+      options:
+        max_wallclock_seconds: 3600
+        resources:
+          num_machines: 1
+        withmpi: true
+    parameters:
+      INPUT:
+        asr: crystal
+ph:
+  max_iterations: 5
+  ph:
+    code: test.quantumespresso.ph
+    metadata:
+      options:
+        max_wallclock_seconds: 43200
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: true
+    parameters:
+      INPUTPH:
+        alpha_mix: 0.4
+        nmix_ph: 8
+        tr2_ph: 1.0e-18
+  qpoints_distance: 0.3
+  qpoints_force_parity: false
+q2r:
+  q2r:
+    code: test.quantumespresso.q2r
+    metadata:
+      options:
+        max_wallclock_seconds: 3600
+        resources:
+          num_machines: 1
+        withmpi: true
+    parameters:
+      INPUT:
+        zasr: crystal
+scf:
+  kpoints_distance: 0.15
+  kpoints_force_parity: false
+  max_iterations: 5
+  pw:
+    code: test.quantumespresso.pw
+    metadata:
+      options:
+        max_wallclock_seconds: 43200
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: true
+    parameters:
+      CONTROL:
+        calculation: scf
+        etot_conv_thr: 2.0e-05
+        forc_conv_thr: 0.0001
+        restart_mode: from_scratch
+        tprnfor: true
+        tstress: true
+      ELECTRONS:
+        conv_thr: 4.0e-10
+        electron_maxstep: 80
+        mixing_beta: 0.4
+      SYSTEM:
+        degauss: 0.02
+        ecutrho: 240.0
+        ecutwfc: 30.0
+        nosym: false
+        occupations: smearing
+        smearing: cold
+    pseudos:
+      Si: Si<md5=57fa15d98af99972c7b7aa5c179b0bb8>
+structure: Si2

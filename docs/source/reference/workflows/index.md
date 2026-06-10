@@ -15,4 +15,5 @@ q2r
 pdos
 conductivity
 epsilon
+phonon_bands
 ```
