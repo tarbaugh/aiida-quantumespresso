@@ -39,7 +39,9 @@ def test_ase_default(fixture_sandbox, generate_calc_job, generate_inputs, file_r
     assert sorted(fixture_sandbox.get_content_list()) == sorted(['aiida_ase_script.py', 'structure.xyz'])
 
     with fixture_sandbox.open('aiida_ase_script.py') as handle:
-        file_regression.check(handle.read(), encoding='utf-8', extension='.py')
+        # Stored with a `.txt` extension: a `test_*.py` regression artifact would be collected by pytest and
+        # executed at import time, since the generated script is a valid Python module.
+        file_regression.check(handle.read(), encoding='utf-8', extension='.txt')
 
 
 def test_ase_grace_calculator(fixture_sandbox, generate_calc_job, generate_inputs):
