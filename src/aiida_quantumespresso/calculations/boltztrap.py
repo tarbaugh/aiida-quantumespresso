@@ -130,27 +130,45 @@ class BoltztrapCalculation(CalcJob):
             message='The transport output files did not have the expected number of columns.',
         )
 
-    def _get_parameters(self):
-        """Return the ``btp2`` parameters, merging the user input on top of the defaults."""
-        parameters = {section: dict(values) for section, values in self._DEFAULT_PARAMETERS.items()}
+    @classmethod
+    def get_default_parameters(cls):
+        """Return a copy of the default ``btp2`` parameters.
 
-        user_parameters = self.inputs.parameters.get_dict() if 'parameters' in self.inputs else {}
+        These defaults are the single source of truth for the command-line arguments of ``btp2``: work chains that
+        prepopulate the ``parameters`` input (e.g. through a protocol) should build on top of this dictionary with
+        :meth:`merge_parameters`, rather than encoding their own copy of the values.
+        """
+        return {section: dict(values) for section, values in cls._DEFAULT_PARAMETERS.items()}
 
-        # The interpolation k-grid is set either through `multiplier` or `kpoints` (they are mutually exclusive), so if
-        # the user provides one of the two, the default of the other has to be dropped.
-        user_interpolate = user_parameters.get('interpolate', {})
-        if 'kpoints' in user_interpolate:
+    @classmethod
+    def merge_parameters(cls, overrides):
+        """Return the default ``btp2`` parameters merged with the given overrides.
+
+        The interpolation k-grid is set either through ``multiplier`` or ``kpoints`` (they are mutually exclusive), so
+        if the overrides provide one of the two, the default of the other is dropped.
+
+        :param overrides: dictionary of parameter overrides, with the same structure as the ``parameters`` input.
+        :return: the merged parameters dictionary.
+        """
+        parameters = cls.get_default_parameters()
+
+        interpolate_overrides = overrides.get('interpolate', {})
+        if 'kpoints' in interpolate_overrides:
             parameters['interpolate'].pop('multiplier', None)
-        if 'multiplier' in user_interpolate:
+        if 'multiplier' in interpolate_overrides:
             parameters['interpolate'].pop('kpoints', None)
 
-        for section, values in user_parameters.items():
+        for section, values in overrides.items():
             if isinstance(values, dict):
                 parameters.setdefault(section, {}).update(values)
             else:
                 parameters[section] = values
 
         return parameters
+
+    def _get_parameters(self):
+        """Return the ``btp2`` parameters, merging the user input on top of the defaults."""
+        return self.merge_parameters(self.inputs.parameters.get_dict() if 'parameters' in self.inputs else {})
 
     @staticmethod
     def _interpolate_flags(interpolate):

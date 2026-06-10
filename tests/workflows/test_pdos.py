@@ -154,3 +154,9 @@ def test_default(
         'nscf__output_parameters',
         'nscf__output_band',
     }
+
+
+def test_invalid_inputs_no_nscf_kpoints(generate_workchain_pdos):
+    """Test that the work chain rejects inputs where the NSCF has neither ``kpoints`` nor ``kpoints_distance``."""
+    with pytest.raises(ValueError, match=r'Neither `kpoints` nor `kpoints_distance` was specified'):
+        generate_workchain_pdos(with_nscf_kpoints=False)

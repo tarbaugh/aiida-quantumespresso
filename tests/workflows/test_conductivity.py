@@ -105,3 +105,11 @@ def test_default(
         'boltztrap__output_parameters',
         'boltztrap__transport_coefficients',
     }
+
+
+def test_invalid_inputs_no_nscf_kpoints(generate_workchain_conductivity):
+    """Test that the work chain rejects inputs where the NSCF has neither ``kpoints`` nor ``kpoints_distance``."""
+    import pytest
+
+    with pytest.raises(ValueError, match=r'Neither `kpoints` nor `kpoints_distance` was specified'):
+        generate_workchain_conductivity(with_nscf_kpoints=False)

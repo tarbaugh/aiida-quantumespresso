@@ -954,7 +954,7 @@ def generate_workchain_ph(generate_workchain, generate_inputs_ph, generate_calc_
 def generate_workchain_pdos(generate_workchain, generate_inputs_pw, fixture_code):
     """Generate an instance of a `PdosWorkChain`."""
 
-    def _generate_workchain_pdos(emin=None, emax=None, energy_range_vs_fermi=None):
+    def _generate_workchain_pdos(emin=None, emax=None, energy_range_vs_fermi=None, with_nscf_kpoints=True):
         from aiida.orm import Bool, Dict, List
 
         from aiida_quantumespresso.utils.resources import get_default_options
@@ -973,7 +973,9 @@ def generate_workchain_pdos(generate_workchain, generate_inputs_pw, fixture_code
         nscf_pw_inputs['parameters']['SYSTEM']['occupations'] = 'tetrahedra'
         nscf_pw_inputs['parameters']['SYSTEM']['nosym'] = True
 
-        nscf = {'pw': nscf_pw_inputs, 'kpoints': kpoints}
+        nscf = {'pw': nscf_pw_inputs}
+        if with_nscf_kpoints:
+            nscf['kpoints'] = kpoints
 
         dos_params = {
             'DOS': {
@@ -1016,7 +1018,7 @@ def generate_workchain_pdos(generate_workchain, generate_inputs_pw, fixture_code
 def generate_workchain_conductivity(generate_workchain, generate_inputs_pw, fixture_code):
     """Generate an instance of a `ConductivityWorkChain`."""
 
-    def _generate_workchain_conductivity():
+    def _generate_workchain_conductivity(with_nscf_kpoints=True):
         from aiida.orm import Bool, Dict
 
         from aiida_quantumespresso.utils.resources import get_default_options
@@ -1034,7 +1036,9 @@ def generate_workchain_conductivity(generate_workchain, generate_inputs_pw, fixt
         nscf_pw_inputs['parameters']['CONTROL']['calculation'] = 'nscf'
         nscf_pw_inputs['parameters']['SYSTEM']['occupations'] = 'tetrahedra'
         # NB: contrary to the `PdosWorkChain`, `nosym` is intentionally not set for the conductivity NSCF.
-        nscf = {'pw': nscf_pw_inputs, 'kpoints': kpoints}
+        nscf = {'pw': nscf_pw_inputs}
+        if with_nscf_kpoints:
+            nscf['kpoints'] = kpoints
 
         boltztrap = {
             'code': fixture_code('quantumespresso.boltztrap'),
@@ -1059,7 +1063,7 @@ def generate_workchain_conductivity(generate_workchain, generate_inputs_pw, fixt
 def generate_workchain_epsilon(generate_workchain, generate_inputs_pw, fixture_code):
     """Generate an instance of a `EpsilonWorkChain`."""
 
-    def _generate_workchain_epsilon():
+    def _generate_workchain_epsilon(with_nscf_kpoints=True):
         from aiida.orm import Bool, Dict
 
         from aiida_quantumespresso.utils.resources import get_default_options
@@ -1078,7 +1082,9 @@ def generate_workchain_epsilon(generate_workchain, generate_inputs_pw, fixture_c
         # epsilon.x requires the NSCF to cover the full Brillouin zone without symmetry reduction.
         nscf_pw_inputs['parameters']['SYSTEM']['nosym'] = True
         nscf_pw_inputs['parameters']['SYSTEM']['noinv'] = True
-        nscf = {'pw': nscf_pw_inputs, 'kpoints': kpoints}
+        nscf = {'pw': nscf_pw_inputs}
+        if with_nscf_kpoints:
+            nscf['kpoints'] = kpoints
 
         epsilon = {
             'code': fixture_code('quantumespresso.epsilon'),

@@ -49,13 +49,13 @@ Related Resources:
 import jsonschema
 from aiida import orm, plugins
 from aiida.common import AttributeDict
-from aiida.engine import ToContext, WorkChain, if_
+from aiida.engine import ToContext, if_
 from aiida.orm.nodes.data.base import to_aiida_type
 
 from aiida_quantumespresso.utils.cleanup import clean_calcjob_remote, clean_workchain_calcs
-from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
-from .protocols.utils import ProtocolMixin
+from .scf_nscf import ScfNscfWorkChain
+from .scf_nscf import validate_inputs as validate_inputs_scf_nscf
 
 
 def get_parameter_schema():
@@ -75,24 +75,19 @@ def get_parameter_schema():
     }
 
 
-def validate_inputs(value, _):
+def validate_inputs(value, port_namespace):
     """Validate the top level namespace.
 
-    - Check that either the `scf` or `nscf.pw.parent_folder` inputs is provided.
+    In addition to the checks of the :class:`~aiida_quantumespresso.workflows.scf_nscf.ScfNscfWorkChain` base class:
+
     - Check that the `emin`, `emax` and `deltae` inputs are the same for the `dos` and `projwfc` namespaces.
     - Warn the user when both `energy_range_vs_fermi` and `emin` and `emax` are specified.
-    - Raise error when `nbands_factor` is specified and `nscf.pw.parameters.SYSTEM.nbnd` is also specified.
     """
-    # Check that either the `scf` input or `nscf.pw.parent_folder` is provided.
     import warnings
 
-    if 'scf' in value and 'parent_folder' in value['nscf']['pw']:
-        warnings.warn(
-            'Both the `scf` and `nscf.pw.parent_folder` inputs were provided. The SCF calculation will '
-            'be run with the inputs provided in `scf` and the `nscf.pw.parent_folder` will be ignored.'
-        )
-    elif 'scf' not in value and 'parent_folder' not in value['nscf']['pw']:
-        return 'Specifying either the `scf` or `nscf.pw.parent_folder` input is required.'
+    result = validate_inputs_scf_nscf(value, port_namespace)
+    if result is not None:
+        return result
 
     for par in ['emin', 'emax', 'deltae']:
         if value['dos']['parameters']['DOS'].get(par, None) != value['projwfc']['parameters']['PROJWFC'].get(par, None):
@@ -105,15 +100,6 @@ def validate_inputs(value, _):
                     f'The `{par}` parameter and `energy_range_vs_fermi` were specified.'
                     'The value in `energy_range_vs_fermi` will be used.'
                 )
-    if 'nbands_factor' in value and 'nbnd' in value['nscf']['pw']['parameters'].base.attributes.get('SYSTEM', {}):
-        return PdosWorkChain.exit_codes.ERROR_INVALID_INPUT_NUMBER_OF_BANDS.message
-
-
-def validate_scf(value, _):
-    """Validate the scf parameters."""
-    parameters = value['pw']['parameters'].get_dict()
-    if parameters.get('CONTROL', {}).get('calculation', 'scf') != 'scf':
-        return '`CONTOL.calculation` in `scf.pw.parameters` is not set to `scf`.'
 
 
 def validate_nscf(value, _):
@@ -163,14 +149,15 @@ DosCalculation = plugins.CalculationFactory('quantumespresso.dos')
 ProjwfcCalculation = plugins.CalculationFactory('quantumespresso.projwfc')
 
 
-class PdosWorkChain(ProtocolMixin, WorkChain):
+class PdosWorkChain(ScfNscfWorkChain):
     """A WorkChain to compute Total & Partial Density of States of a structure, using Quantum Espresso."""
 
     @classmethod
     def define(cls, spec):
         """Define the process specification."""
         super().define(spec)
-        spec.input('structure', valid_type=orm.StructureData, help='The input structure.')
+        spec.inputs['nscf'].validator = validate_nscf
+
         spec.input(
             'serial_clean',
             valid_type=orm.Bool,
@@ -180,20 +167,6 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
                 'If ``True``, calculations will be run in serial, '
                 'and work directories will be cleaned before the next step.'
             ),
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculation will be cleaned at the end of execution.',
-        )
-        spec.input(
-            'dry_run',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            required=False,
-            help='Terminate workchain steps before submitting calculations (test purposes only).',
         )
         spec.input(
             'energy_range_vs_fermi',
@@ -207,33 +180,7 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
                 'Otherwise, the default values are extracted from the NSCF calculation.'
             ),
         )
-        spec.input(
-            'nbands_factor',
-            valid_type=orm.Float,
-            required=False,
-            help='The number of bands for the NSCF calculation is that used for the SCF multiplied by this factor.',
-        )
 
-        spec.expose_inputs(
-            PwBaseWorkChain,
-            namespace='scf',
-            exclude=('clean_workdir', 'pw.structure', 'pw.parent_folder'),
-            namespace_options={
-                'help': 'Inputs for the `PwBaseWorkChain` of the `scf` calculation.',
-                'validator': validate_scf,
-                'required': False,
-                'populate_defaults': False,
-            },
-        )
-        spec.expose_inputs(
-            PwBaseWorkChain,
-            namespace='nscf',
-            exclude=('clean_workdir', 'pw.structure'),
-            namespace_options={
-                'help': 'Inputs for the `PwBaseWorkChain` of the `nscf` calculation.',
-                'validator': validate_nscf,
-            },
-        )
         spec.expose_inputs(
             DosCalculation,
             namespace='dos',
@@ -277,21 +224,9 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
             cls.results,
         )
 
-        spec.exit_code(
-            202,
-            'ERROR_INVALID_INPUT_KPOINTS',
-            message='Neither the `kpoints` nor the `kpoints_distance` input was specified for base or nscf namespaces.',
-        )
-        spec.exit_code(401, 'ERROR_SUB_PROCESS_FAILED_SCF', message='the SCF sub process failed')
-        spec.exit_code(402, 'ERROR_SUB_PROCESS_FAILED_NSCF', message='the NSCF sub process failed')
         spec.exit_code(403, 'ERROR_SUB_PROCESS_FAILED_DOS', message='the DOS sub process failed')
         spec.exit_code(404, 'ERROR_SUB_PROCESS_FAILED_PROJWFC', message='the PROJWFC sub process failed')
         spec.exit_code(404, 'ERROR_SUB_PROCESS_FAILED_BOTH', message='both the DOS and PROJWFC sub process failed')
-        spec.exit_code(
-            405,
-            'ERROR_INVALID_INPUT_NUMBER_OF_BANDS',
-            message='Cannot specify both `nbands_factor` and `nscf.pw.parameters.SYSTEM.nbnd`.',
-        )
 
         spec.expose_outputs(PwBaseWorkChain, namespace='nscf')
         spec.expose_outputs(DosCalculation, namespace='dos')
@@ -328,19 +263,9 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
 
         inputs = cls.get_protocol_inputs(protocol, overrides)
 
-        args = (pw_code, structure, protocol)
-        scf = PwBaseWorkChain.get_builder_from_protocol(
-            *args, overrides=inputs.get('scf', None), options=options, **kwargs
+        scf, nscf = cls.get_scf_nscf_builders(
+            pw_code, structure, protocol, inputs, options=options, pop_nscf_smearing=True, **kwargs
         )
-        scf['pw'].pop('structure', None)
-        scf.pop('clean_workdir', None)
-        nscf = PwBaseWorkChain.get_builder_from_protocol(
-            *args, overrides=inputs.get('nscf', None), options=options, **kwargs
-        )
-        nscf['pw'].pop('structure', None)
-        nscf['pw']['parameters']['SYSTEM'].pop('smearing', None)
-        nscf['pw']['parameters']['SYSTEM'].pop('degauss', None)
-        nscf.pop('clean_workdir', None)
 
         metadata_dos = inputs.get('dos', {}).get('metadata', {'options': {}})
         metadata_projwfc = inputs.get('projwfc', {}).get('metadata', {'options': {}})
@@ -370,8 +295,8 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
 
     def setup(self):
         """Initialize context variables that are used during the logical flow of the workchain."""
+        super().setup()
         self.ctx.serial_clean = 'serial_clean' in self.inputs and self.inputs.serial_clean.value
-        self.ctx.dry_run = 'dry_run' in self.inputs and self.inputs.dry_run.value
 
     def serial_clean(self):
         """Return whether dos and projwfc calculations should be run in serial.
@@ -380,87 +305,13 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
         """
         return self.ctx.serial_clean
 
-    def should_run_scf(self):
-        """Return whether the work chain should run an SCF calculation."""
-        return 'scf' in self.inputs
-
-    def run_scf(self):
-        """Run an SCF calculation, to generate the wavefunction."""
-        inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, 'scf'))
-        inputs.pw.structure = self.inputs.structure
-
-        inputs.metadata.call_link_label = 'scf'
-        inputs = prepare_process_inputs(PwBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(PwBaseWorkChain, **inputs)
-
-        self.report(f'launching SCF PwBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_scf=future)
-
-    def inspect_scf(self):
-        """Verify that the SCF calculation finished successfully."""
-        workchain = self.ctx.workchain_scf
-        if not workchain.is_finished_ok:
-            self.report(f'SCF PwBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_SCF
-
-        self.ctx.scf_parent_folder = workchain.outputs.remote_folder
-
-    def run_nscf(self):
-        """Run an NSCF calculation, to generate eigenvalues with a denser k-point mesh.
-
-        This calculation modifies the base scf calculation inputs by:
-
-        - Using the parent folder from the scf calculation.
-        - Replacing the kpoints, if an alternative is specified for nscf.
-        - Changing ``SYSTEM.occupations`` to 'tetrahedra'.
-        - Changing ``SYSTEM.nosym`` to True, to avoid generation of additional k-points in low symmetry cases.
-        - Replace the ``pw.metadata.options``, if an alternative is specified for nscf.
-
-        """
-        inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, 'nscf'))
-
-        # If no SCF calculation launched, `workchain_scf` is not in ctx
-        # but `nscf.pw.parent_folder` is given if inputs are valid
-        if 'scf' in self.inputs:
-            inputs.pw.parent_folder = self.ctx.scf_parent_folder
-
-        if 'nbands_factor' in self.inputs:
-            inputs.pw.parameters = inputs.pw.parameters.get_dict()
-            factor = self.inputs.nbands_factor.value
-            parameters = inputs.pw.parent_folder.creator.outputs.output_parameters.get_dict()
-            # TODO: Parse the relevant output_parameters directly from the parent folder
-            # instead of going through the creator node for more robustness
-            nbands = int(parameters['number_of_bands'])
-            nelectron = int(parameters['number_of_electrons'])
-            nbnd = max(int(0.5 * nelectron * factor), int(0.5 * nelectron) + 4, nbands)
-            inputs.pw.parameters['SYSTEM']['nbnd'] = nbnd
-
-        inputs.pw.structure = self.inputs.structure
-
-        inputs.metadata.call_link_label = 'nscf'
-
-        inputs = prepare_process_inputs(PwBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(PwBaseWorkChain, **inputs)
-
-        self.report(f'launching NSCF PwBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_nscf=future)
-
     def inspect_nscf(self):
-        """Verify that the NSCF calculation finished successfully."""
+        """Verify that the NSCF calculation finished successfully and extract the energy window for the (P)DOS."""
+        result = super().inspect_nscf()
+        if result is not None:
+            return result
+
         workchain = self.ctx.workchain_nscf
-        if not workchain.is_finished_ok:
-            self.report(f'NSCF PwBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_NSCF
 
         if self.ctx.serial_clean and 'scf' in self.inputs:
             # if scf was run in this workchain,
@@ -473,7 +324,6 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
 
         self.ctx.nscf_emin = workchain.outputs.output_band.get_array('bands').min()
         self.ctx.nscf_emax = workchain.outputs.output_band.get_array('bands').max()
-        self.ctx.nscf_parent_folder = workchain.outputs.remote_folder
         if 'fermi_energy' in workchain.outputs.output_parameters.dict:
             self.ctx.nscf_fermi = workchain.outputs.output_parameters.dict.fermi_energy
         else:
@@ -604,16 +454,3 @@ class PdosWorkChain(ProtocolMixin, WorkChain):
         self.out_many(self.exposed_outputs(self.ctx.workchain_nscf, PwBaseWorkChain, namespace='nscf'))
         self.out_many(self.exposed_outputs(self.ctx.calc_dos, DosCalculation, namespace='dos'))
         self.out_many(self.exposed_outputs(self.ctx.calc_projwfc, ProjwfcCalculation, namespace='projwfc'))
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

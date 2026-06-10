@@ -97,3 +97,11 @@ def test_default(
         'epsilon__output_parameters',
         'epsilon__output_epsilon',
     }
+
+
+def test_invalid_inputs_no_nscf_kpoints(generate_workchain_epsilon):
+    """Test that the work chain rejects inputs where the NSCF has neither ``kpoints`` nor ``kpoints_distance``."""
+    import pytest
+
+    with pytest.raises(ValueError, match=r'Neither `kpoints` nor `kpoints_distance` was specified'):
+        generate_workchain_epsilon(with_nscf_kpoints=False)

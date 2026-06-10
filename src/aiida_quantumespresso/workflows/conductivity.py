@@ -15,21 +15,12 @@ the full Brillouin zone from the irreducible set using the symmetry operations.
 
 from aiida import orm, plugins
 from aiida.common import AttributeDict
-from aiida.engine import ToContext, WorkChain, if_
-from aiida.orm.nodes.data.base import to_aiida_type
+from aiida.engine import ToContext, if_
 
-from aiida_quantumespresso.utils.bands import get_nbands_from_parent_calculation
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
-from aiida_quantumespresso.utils.mapping import prepare_process_inputs
+from .scf_nscf import ScfNscfWorkChain
 
-from .protocols.utils import ProtocolMixin
-
-
-def validate_scf(value, _):
-    """Validate the SCF parameters."""
-    parameters = value['pw']['parameters'].get_dict()
-    if parameters.get('CONTROL', {}).get('calculation', 'scf') != 'scf':
-        return '`CONTROL.calculation` in `scf.pw.parameters` is not set to `scf`.'
+PwBaseWorkChain = plugins.WorkflowFactory('quantumespresso.pw.base')
+BoltztrapCalculation = plugins.CalculationFactory('quantumespresso.boltztrap')
 
 
 def validate_nscf(value, _):
@@ -51,80 +42,15 @@ def validate_nscf(value, _):
         )
 
 
-def validate_inputs(value, _):
-    """Validate the top level namespace.
-
-    - Check that either the `scf` or the `nscf.pw.parent_folder` input is provided.
-    - Raise an error when `nbands_factor` is specified together with an explicit `nscf.pw.parameters.SYSTEM.nbnd`.
-    """
-    import warnings
-
-    if 'scf' in value and 'parent_folder' in value['nscf']['pw']:
-        warnings.warn(
-            'Both the `scf` and `nscf.pw.parent_folder` inputs were provided. The SCF calculation will be run with '
-            'the inputs provided in `scf` and the `nscf.pw.parent_folder` will be ignored.'
-        )
-    elif 'scf' not in value and 'parent_folder' not in value['nscf']['pw']:
-        return 'Specifying either the `scf` or `nscf.pw.parent_folder` input is required.'
-
-    if 'nbands_factor' in value and 'nbnd' in value['nscf']['pw']['parameters'].base.attributes.get('SYSTEM', {}):
-        return ConductivityWorkChain.exit_codes.ERROR_INVALID_INPUT_NUMBER_OF_BANDS.message
-
-
-PwBaseWorkChain = plugins.WorkflowFactory('quantumespresso.pw.base')
-BoltztrapCalculation = plugins.CalculationFactory('quantumespresso.boltztrap')
-
-
-class ConductivityWorkChain(ProtocolMixin, WorkChain):
+class ConductivityWorkChain(ScfNscfWorkChain):
     """A WorkChain to compute the electrical conductivity of a structure, using Quantum ESPRESSO and BoltzTraP2."""
 
     @classmethod
     def define(cls, spec):
         """Define the process specification."""
         super().define(spec)
-        spec.input('structure', valid_type=orm.StructureData, help='The input structure.')
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
-        )
-        spec.input(
-            'nbands_factor',
-            valid_type=orm.Float,
-            required=False,
-            help='The number of bands for the NSCF calculation is that used for the SCF multiplied by this factor. It '
-            'should be large enough that the bands span the transport energy window of interest.',
-        )
-        spec.input(
-            'dry_run',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            required=False,
-            help='Terminate workchain steps before submitting calculations (test purposes only).',
-        )
+        spec.inputs['nscf'].validator = validate_nscf
 
-        spec.expose_inputs(
-            PwBaseWorkChain,
-            namespace='scf',
-            exclude=('clean_workdir', 'pw.structure', 'pw.parent_folder'),
-            namespace_options={
-                'help': 'Inputs for the `PwBaseWorkChain` of the `scf` calculation.',
-                'validator': validate_scf,
-                'required': False,
-                'populate_defaults': False,
-            },
-        )
-        spec.expose_inputs(
-            PwBaseWorkChain,
-            namespace='nscf',
-            exclude=('clean_workdir', 'pw.structure'),
-            namespace_options={
-                'help': 'Inputs for the `PwBaseWorkChain` of the `nscf` calculation.',
-                'validator': validate_nscf,
-            },
-        )
         spec.expose_inputs(
             BoltztrapCalculation,
             namespace='boltztrap',
@@ -133,7 +59,6 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
                 'help': 'Inputs for the `BoltztrapCalculation` that computes the transport coefficients.'
             },
         )
-        spec.inputs.validator = validate_inputs
 
         spec.outline(
             cls.setup,
@@ -148,19 +73,7 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
             cls.results,
         )
 
-        spec.exit_code(401, 'ERROR_SUB_PROCESS_FAILED_SCF', message='the SCF sub process failed')
-        spec.exit_code(402, 'ERROR_SUB_PROCESS_FAILED_NSCF', message='the NSCF sub process failed')
         spec.exit_code(403, 'ERROR_SUB_PROCESS_FAILED_BOLTZTRAP', message='the BoltzTraP2 sub process failed')
-        spec.exit_code(
-            405,
-            'ERROR_INVALID_INPUT_NUMBER_OF_BANDS',
-            message='Cannot specify both `nbands_factor` and `nscf.pw.parameters.SYSTEM.nbnd`.',
-        )
-        spec.exit_code(
-            406,
-            'ERROR_INVALID_PARENT_FOLDER',
-            message='The number of bands could not be determined from the parent calculation of the NSCF.',
-        )
 
         spec.expose_outputs(PwBaseWorkChain, namespace='nscf')
         spec.expose_outputs(BoltztrapCalculation, namespace='boltztrap')
@@ -195,20 +108,9 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
 
         inputs = cls.get_protocol_inputs(protocol, overrides)
 
-        args = (pw_code, structure, protocol)
-        scf = PwBaseWorkChain.get_builder_from_protocol(
-            *args, overrides=inputs.get('scf', None), options=options, **kwargs
+        scf, nscf = cls.get_scf_nscf_builders(
+            pw_code, structure, protocol, inputs, options=options, pop_nscf_smearing=True, **kwargs
         )
-        scf['pw'].pop('structure', None)
-        scf.pop('clean_workdir', None)
-
-        nscf = PwBaseWorkChain.get_builder_from_protocol(
-            *args, overrides=inputs.get('nscf', None), options=options, **kwargs
-        )
-        nscf['pw'].pop('structure', None)
-        nscf['pw']['parameters']['SYSTEM'].pop('smearing', None)
-        nscf['pw']['parameters']['SYSTEM'].pop('degauss', None)
-        nscf.pop('clean_workdir', None)
 
         metadata_boltztrap = inputs.get('boltztrap', {}).get('metadata', {'options': {}})
 
@@ -219,6 +121,9 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
             metadata_boltztrap['options'], boltztrap_code.computer.scheduler_type
         )
 
+        # The defaults of the `btp2` arguments live on the `BoltztrapCalculation`; the protocol only provides deltas.
+        parameters = BoltztrapCalculation.merge_parameters(inputs.get('boltztrap', {}).get('parameters', {}))
+
         builder = cls.get_builder()
         builder.structure = structure
         builder.clean_workdir = orm.Bool(inputs['clean_workdir'])
@@ -227,89 +132,10 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
         builder.scf = scf
         builder.nscf = nscf
         builder.boltztrap.code = boltztrap_code
-        builder.boltztrap.parameters = orm.Dict(inputs.get('boltztrap', {}).get('parameters', {}))
+        builder.boltztrap.parameters = orm.Dict(parameters)
         builder.boltztrap.metadata = metadata_boltztrap
 
         return builder
-
-    def setup(self):
-        """Initialize context variables that are used during the logical flow of the workchain."""
-        self.ctx.dry_run = 'dry_run' in self.inputs and self.inputs.dry_run.value
-
-    def should_run_scf(self):
-        """Return whether the work chain should run an SCF calculation."""
-        return 'scf' in self.inputs
-
-    def run_scf(self):
-        """Run an SCF calculation, to generate the ground-state charge density."""
-        inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, 'scf'))
-        inputs.pw.structure = self.inputs.structure
-        inputs.metadata.call_link_label = 'scf'
-        inputs = prepare_process_inputs(PwBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(PwBaseWorkChain, **inputs)
-        self.report(f'launching SCF PwBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_scf=future)
-
-    def inspect_scf(self):
-        """Verify that the SCF calculation finished successfully."""
-        workchain = self.ctx.workchain_scf
-        if not workchain.is_finished_ok:
-            self.report(f'SCF PwBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_SCF
-
-        self.ctx.scf_parent_folder = workchain.outputs.remote_folder
-
-    def run_nscf(self):
-        """Run an NSCF calculation, to generate eigenvalues with a dense, uniform k-point mesh.
-
-        This calculation modifies the base NSCF calculation inputs by:
-
-        - Using the parent folder from the SCF calculation (if one was run).
-        - Setting the number of bands from the ``nbands_factor``, if specified.
-
-        Note that, unlike in the ``PdosWorkChain``, ``SYSTEM.nosym`` is *not* forced to ``True``: BoltzTraP2 expands the
-        irreducible k-point set to the full Brillouin zone using the crystal symmetry, so symmetry must be preserved.
-        """
-        inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, 'nscf'))
-
-        if 'scf' in self.inputs:
-            inputs.pw.parent_folder = self.ctx.scf_parent_folder
-
-        if 'nbands_factor' in self.inputs:
-            try:
-                nbnd = get_nbands_from_parent_calculation(inputs.pw.parent_folder, self.inputs.nbands_factor.value)
-            except ValueError as exception:
-                self.report(f'could not determine the number of bands for the NSCF calculation: {exception}')
-                return self.exit_codes.ERROR_INVALID_PARENT_FOLDER
-
-            inputs.pw.parameters = inputs.pw.parameters.get_dict()
-            inputs.pw.parameters['SYSTEM']['nbnd'] = nbnd
-
-        inputs.pw.structure = self.inputs.structure
-        inputs.metadata.call_link_label = 'nscf'
-        inputs = prepare_process_inputs(PwBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(PwBaseWorkChain, **inputs)
-        self.report(f'launching NSCF PwBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_nscf=future)
-
-    def inspect_nscf(self):
-        """Verify that the NSCF calculation finished successfully."""
-        workchain = self.ctx.workchain_nscf
-        if not workchain.is_finished_ok:
-            self.report(f'NSCF PwBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_NSCF
-
-        self.ctx.nscf_parent_folder = workchain.outputs.remote_folder
 
     def run_boltztrap(self):
         """Run the BoltzTraP2 calculation, to compute the transport coefficients."""
@@ -338,16 +164,3 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
 
         self.out_many(self.exposed_outputs(self.ctx.workchain_nscf, PwBaseWorkChain, namespace='nscf'))
         self.out_many(self.exposed_outputs(self.ctx.calc_boltztrap, BoltztrapCalculation, namespace='boltztrap'))
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')
