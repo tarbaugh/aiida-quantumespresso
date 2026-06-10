@@ -1,0 +1,25 @@
+default_inputs:
+    clean_workdir: False
+    scale_factors: [0.94, 0.96, 0.98, 1.0, 1.02, 1.04, 1.06]
+    qe:
+        pw:
+            parameters:
+                CONTROL:
+                    restart_mode: from_scratch
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to compare the QE and ML equations of state at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to compare the QE and ML equations of state at high precision at higher computational cost.'
+        scale_factors: [0.94, 0.955, 0.97, 0.985, 1.0, 1.015, 1.03, 1.045, 1.06]
+    fast:
+        description: 'Protocol to compare the QE and ML equations of state at low precision at minimal computational cost for testing purposes.'
+        scale_factors: [0.94, 0.97, 1.0, 1.03, 1.06]
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema:
+    qe:
+        meta_parameters:
+            conv_thr_per_atom:
+            etot_conv_thr_per_atom:
+        pseudo_family:

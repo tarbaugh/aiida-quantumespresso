@@ -1,0 +1,55 @@
+clean_workdir: false
+ml:
+  calculator:
+    args:
+    - GRACE-1L-OAM
+    callable: grace_fm
+    module: tensorpotential.calculator
+  code: test.quantumespresso.ase
+  metadata:
+    options:
+      resources:
+        num_machines: 1
+qe:
+  kpoints_distance: 0.15
+  kpoints_force_parity: false
+  max_iterations: 5
+  pw:
+    code: test.quantumespresso.pw
+    metadata:
+      options:
+        max_wallclock_seconds: 43200
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: true
+    parameters:
+      CONTROL:
+        calculation: scf
+        etot_conv_thr: 2.0e-05
+        forc_conv_thr: 0.0001
+        restart_mode: from_scratch
+        tprnfor: true
+        tstress: true
+      ELECTRONS:
+        conv_thr: 4.0e-10
+        electron_maxstep: 80
+        mixing_beta: 0.4
+      SYSTEM:
+        degauss: 0.02
+        ecutrho: 240.0
+        ecutwfc: 30.0
+        nosym: false
+        occupations: smearing
+        smearing: cold
+    pseudos:
+      Si: Si<md5=57fa15d98af99972c7b7aa5c179b0bb8>
+scale_factors:
+- 0.94
+- 0.96
+- 0.98
+- 1.0
+- 1.02
+- 1.04
+- 1.06
+structure: Si2

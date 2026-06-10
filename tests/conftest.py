@@ -1199,3 +1199,38 @@ def generate_workchain_relax_comparison(generate_workchain, generate_inputs_pw, 
         return generate_workchain(entry_point, inputs)
 
     return _generate_workchain_relax_comparison
+
+
+@pytest.fixture
+def generate_workchain_eos_comparison(generate_workchain, generate_inputs_pw, fixture_code):
+    """Generate an instance of a `EosComparisonWorkChain`."""
+
+    def _generate_workchain_eos_comparison(scale_factors=None):
+        from aiida.orm import Bool, Dict, List
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.eos_comparison'
+
+        pw_inputs = generate_inputs_pw()
+        kpoints = pw_inputs.pop('kpoints')
+        structure = pw_inputs.pop('structure')
+        qe = {'pw': pw_inputs, 'kpoints': kpoints}
+
+        ml = {
+            'code': fixture_code('quantumespresso.ase'),
+            'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
+            'metadata': {'options': get_default_options()},
+        }
+
+        inputs = {
+            'structure': structure,
+            'scale_factors': List(scale_factors or [0.94, 0.97, 1.0, 1.03, 1.06]),
+            'qe': qe,
+            'ml': ml,
+            'dry_run': Bool(True),
+        }
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_eos_comparison
