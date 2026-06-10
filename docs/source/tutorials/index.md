@@ -17,6 +17,8 @@ Before you get started, make sure that you have:
 magnetism
 hubbard
 conductivity
+epsilon
+phonon_bands
 ```
 
 :::{card}
@@ -95,6 +97,46 @@ Learn how to compute the electrical conductivity, Seebeck coefficient and electr
 :class: footer-table
 :widths: 50 50
 * - {fa}`fa-sharp fa-regular fa-clock` 30 min
+  - {{ aiida_logo }} [Intermediate]{.aiida-orange}
+::::
+:::
+
+
+:::{card}
+:class-header: panel-header-text
+:class-footer: tutor-footer
+:link: tutorials-epsilon
+:link-type: ref
+:margin: 4
+
+{fa}`fa-regular fa-lightbulb` Dielectric function and optical absorption
+^^^
+Learn how to compute the frequency-dependent dielectric function, optical absorption and electron energy-loss spectrum of a material with epsilon.x.
++++
+::::{list-table}
+:class: footer-table
+:widths: 50 50
+* - {fa}`fa-sharp fa-regular fa-clock` 25 min
+  - {{ aiida_logo }} [Intermediate]{.aiida-orange}
+::::
+:::
+
+
+:::{card}
+:class-header: panel-header-text
+:class-footer: tutor-footer
+:link: tutorials-phonon-bands
+:link-type: ref
+:margin: 4
+
+{fa}`fa-solid fa-wave-square` Phonon band structure
+^^^
+Learn how to compute the phonon dispersion of a material with density-functional perturbation theory, by chaining ph.x, q2r.x and matdyn.x.
++++
+::::{list-table}
+:class: footer-table
+:widths: 50 50
+* - {fa}`fa-sharp fa-regular fa-clock` 40 min
   - {{ aiida_logo }} [Intermediate]{.aiida-orange}
 ::::
 :::

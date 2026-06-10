@@ -114,6 +114,8 @@ myst_substitutions = {
     'ConductivityWorkChain': '{class}`~aiida_quantumespresso.workflows.conductivity.ConductivityWorkChain`',
     'BoltztrapCalculation': '{class}`~aiida_quantumespresso.calculations.boltztrap.BoltztrapCalculation`',
     'ElectronicType': '{class}`~aiida_quantumespresso.common.types.ElectronicType`',
+    'EpsilonWorkChain': '{class}`~aiida_quantumespresso.workflows.epsilon.EpsilonWorkChain`',
+    'PhononBandsWorkChain': '{class}`~aiida_quantumespresso.workflows.phonon_bands.PhononBandsWorkChain`',
 }
 
 # -- Options for HTML output ----------------------------------------------
