@@ -18,6 +18,7 @@ from aiida.common import AttributeDict
 from aiida.engine import ToContext, WorkChain, if_
 from aiida.orm.nodes.data.base import to_aiida_type
 
+from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -57,28 +58,6 @@ def validate_inputs(value, _):
 
     if 'nbands_factor' in value and 'nbnd' in value['nscf']['pw']['parameters'].base.attributes.get('SYSTEM', {}):
         return ConductivityWorkChain.exit_codes.ERROR_INVALID_INPUT_NUMBER_OF_BANDS.message
-
-
-def clean_calcjob_remote(node):
-    """Clean the remote directory of a ``CalcJobNode``."""
-    cleaned = False
-    try:
-        node.outputs.remote_folder._clean()  # noqa: SLF001
-        cleaned = True
-    except (OSError, KeyError):
-        pass
-    return cleaned
-
-
-def clean_workchain_calcs(workchain):
-    """Clean all remote directories of a workchain's descendant calculations."""
-    cleaned_calcs = []
-
-    for called_descendant in workchain.called_descendants:
-        if isinstance(called_descendant, orm.CalcJobNode) and clean_calcjob_remote(called_descendant):
-            cleaned_calcs.append(called_descendant.pk)
-
-    return cleaned_calcs
 
 
 PwBaseWorkChain = plugins.WorkflowFactory('quantumespresso.pw.base')
