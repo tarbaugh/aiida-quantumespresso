@@ -1,0 +1,7 @@
+output_parameters:
+  code_version: '7.5'
+  energy_units: eV
+  plasmon_frequencies:
+  - 17.627753123
+  - 17.627737601
+  - 17.627759439

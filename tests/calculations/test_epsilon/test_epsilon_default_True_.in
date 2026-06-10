@@ -1,0 +1,12 @@
+&INPUTPP
+  calculation = 'eps'
+  outdir = './out/'
+  prefix = 'aiida'
+/
+&ENERGY_GRID
+  intersmear =   1.5000000000d-01
+  nw = 1000
+  smeartype = 'gauss'
+  wmax =   2.0000000000d+01
+  wmin =   0.0000000000d+00
+/
