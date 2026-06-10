@@ -99,3 +99,53 @@ class TestGetHighestOccupiedBand:
         bands.store()
         homo = get_highest_occupied_band(bands)
         assert homo == 4
+
+
+@pytest.mark.parametrize(
+    ('factor', 'expected'),
+    [
+        (1.0, 12),  # minimum margin dominates: 0.5 * nelectron + 4 = 12 > max(8, 10)
+        (3.0, 24),  # the factor dominates: 0.5 * nelectron * factor = 0.5 * 16 * 3 = 24
+        (0.1, 12),  # minimum margin dominates: 0.5 * nelectron + 4 = 12
+    ],
+)
+def test_get_nbands_from_parent_calculation(fixture_localhost, generate_calc_job_node, factor, expected):
+    """Test ``get_nbands_from_parent_calculation`` for a parent calculation with valid output parameters."""
+    from aiida import orm
+    from aiida.common.links import LinkType
+
+    from aiida_quantumespresso.utils.bands import get_nbands_from_parent_calculation
+
+    creator = generate_calc_job_node(entry_point_name='quantumespresso.pw', computer=fixture_localhost)
+
+    parameters = orm.Dict({'number_of_bands': 10, 'number_of_electrons': 16})
+    parameters.base.links.add_incoming(creator, link_type=LinkType.CREATE, link_label='output_parameters')
+    parameters.store()
+
+    remote = orm.RemoteData(remote_path='/path/on/remote', computer=fixture_localhost)
+    remote.base.links.add_incoming(creator, link_type=LinkType.CREATE, link_label='remote_folder')
+    remote.store()
+
+    assert get_nbands_from_parent_calculation(remote, factor) == expected
+
+
+def test_get_nbands_from_parent_calculation_no_creator(fixture_localhost):
+    """Test ``get_nbands_from_parent_calculation`` raises when the parent folder was not created by a calculation."""
+    from aiida import orm
+
+    from aiida_quantumespresso.utils.bands import get_nbands_from_parent_calculation
+
+    remote = orm.RemoteData(remote_path='/path/on/remote', computer=fixture_localhost).store()
+
+    with pytest.raises(ValueError, match='was not created by a calculation'):
+        get_nbands_from_parent_calculation(remote, 2.0)
+
+
+def test_get_nbands_from_parent_calculation_no_parameters(fixture_localhost, generate_remote_data):
+    """Test ``get_nbands_from_parent_calculation`` raises when the creator has no ``output_parameters`` output."""
+    from aiida_quantumespresso.utils.bands import get_nbands_from_parent_calculation
+
+    remote = generate_remote_data(fixture_localhost, '/path/on/remote', 'quantumespresso.pw')
+
+    with pytest.raises(ValueError, match='could not parse the number of bands and electrons'):
+        get_nbands_from_parent_calculation(remote, 2.0)

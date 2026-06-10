@@ -18,6 +18,7 @@ from aiida.common import AttributeDict
 from aiida.engine import ToContext, WorkChain, if_
 from aiida.orm.nodes.data.base import to_aiida_type
 
+from aiida_quantumespresso.utils.bands import get_nbands_from_parent_calculation
 from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
@@ -145,6 +146,11 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
             'ERROR_INVALID_INPUT_NUMBER_OF_BANDS',
             message='Cannot specify both `nbands_factor` and `nscf.pw.parameters.SYSTEM.nbnd`.',
         )
+        spec.exit_code(
+            406,
+            'ERROR_INVALID_PARENT_FOLDER',
+            message='The number of bands could not be determined from the parent calculation of the NSCF.',
+        )
 
         spec.expose_outputs(PwBaseWorkChain, namespace='nscf')
         spec.expose_outputs(BoltztrapCalculation, namespace='boltztrap')
@@ -265,12 +271,13 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
             inputs.pw.parent_folder = self.ctx.scf_parent_folder
 
         if 'nbands_factor' in self.inputs:
+            try:
+                nbnd = get_nbands_from_parent_calculation(inputs.pw.parent_folder, self.inputs.nbands_factor.value)
+            except ValueError as exception:
+                self.report(f'could not determine the number of bands for the NSCF calculation: {exception}')
+                return self.exit_codes.ERROR_INVALID_PARENT_FOLDER
+
             inputs.pw.parameters = inputs.pw.parameters.get_dict()
-            factor = self.inputs.nbands_factor.value
-            parameters = inputs.pw.parent_folder.creator.outputs.output_parameters.get_dict()
-            nbands = int(parameters['number_of_bands'])
-            nelectron = int(parameters['number_of_electrons'])
-            nbnd = max(int(0.5 * nelectron * factor), int(0.5 * nelectron) + 4, nbands)
             inputs.pw.parameters['SYSTEM']['nbnd'] = nbnd
 
         inputs.pw.structure = self.inputs.structure

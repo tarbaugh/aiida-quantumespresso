@@ -83,3 +83,37 @@ def get_highest_occupied_band(bands, threshold=0.005):
     # Note that the LUMO band indices are 0-indexed, so the actual band number is one higher, but the band number of the
     # HOMO is one lower than that, which therefore corresponds exactly to the 0-indexed LUMO index
     return max(lumo_indices)
+
+
+def get_nbands_from_parent_calculation(parent_folder, factor):
+    """Return the number of bands for an NSCF calculation based on the outputs of the parent calculation.
+
+    The number of bands is the maximum of the number of bands of the parent calculation, and half the number of
+    electrons times the given factor (plus a minimum of four extra bands as a safety margin).
+
+    :param parent_folder: the ``RemoteData`` output folder of the parent calculation.
+    :param factor: the multiplication factor for the minimum number of bands required to host all electrons.
+    :returns: the number of bands.
+    :raises ValueError: if the parent folder was not created by a calculation, or if that calculation does not have
+        the ``output_parameters`` output with the ``number_of_bands`` and ``number_of_electrons`` keys.
+    """
+    creator = parent_folder.creator
+
+    if creator is None:
+        raise ValueError(
+            f'the parent folder `{parent_folder}` was not created by a calculation, so the number of bands of the '
+            'parent calculation cannot be determined. Specify the number of bands explicitly through '
+            '`SYSTEM.nbnd` instead of using `nbands_factor`.'
+        )
+
+    try:
+        parameters = creator.outputs.output_parameters.get_dict()
+        nbands = int(parameters['number_of_bands'])
+        nelectron = int(parameters['number_of_electrons'])
+    except (AttributeError, KeyError) as exception:
+        raise ValueError(
+            f'could not parse the number of bands and electrons from the `output_parameters` of `{creator}`: '
+            f'{exception}'
+        ) from exception
+
+    return max(int(0.5 * nelectron * factor), int(0.5 * nelectron) + 4, nbands)
