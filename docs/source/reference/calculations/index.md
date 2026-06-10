@@ -8,6 +8,7 @@
 boltztrap
 cp
 dos
+epsilon
 matdyn
 neb
 ph

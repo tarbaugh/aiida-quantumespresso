@@ -1,0 +1,61 @@
+default_inputs:
+    clean_workdir: False
+    nbands_factor: 3.0
+    scf:
+        pw:
+            parameters:
+                CONTROL:
+                    restart_mode: from_scratch
+    nscf:
+        kpoints_distance: 0.15
+        pw:
+            parameters:
+                CONTROL:
+                    calculation: nscf
+                    restart_mode: from_scratch
+                SYSTEM:
+                    # epsilon.x performs no symmetry expansion of the k-points, so the NSCF must cover the full
+                    # Brillouin zone with a uniform, unshifted grid.
+                    nosym: True
+                    noinv: True
+    epsilon:
+        parameters:
+            ENERGY_GRID:
+                smeartype: gauss
+                intersmear: 0.15  # eV
+                wmin: 0.0         # eV
+                wmax: 20.0        # eV
+                nw: 1000
+        metadata:
+            options:
+                max_wallclock_seconds: 43200  # Twelve hours
+                withmpi: True
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to compute the dielectric function at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to compute the dielectric function at high precision at higher computational cost.'
+        nscf:
+            kpoints_distance: 0.08
+        epsilon:
+            parameters:
+                ENERGY_GRID:
+                    intersmear: 0.10
+                    nw: 2000
+    fast:
+        description: 'Protocol to compute the dielectric function at low precision at minimal computational cost for testing purposes.'
+        nscf:
+            kpoints_distance: 0.30
+        epsilon:
+            parameters:
+                ENERGY_GRID:
+                    nw: 600
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema:
+    scf: &pw_base_meta
+        meta_parameters:
+            conv_thr_per_atom:
+            etot_conv_thr_per_atom:
+        pseudo_family:
+    nscf: *pw_base_meta

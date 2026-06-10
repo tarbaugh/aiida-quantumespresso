@@ -1053,3 +1053,47 @@ def generate_workchain_conductivity(generate_workchain, generate_inputs_pw, fixt
         return generate_workchain(entry_point, inputs)
 
     return _generate_workchain_conductivity
+
+
+@pytest.fixture
+def generate_workchain_epsilon(generate_workchain, generate_inputs_pw, fixture_code):
+    """Generate an instance of a `EpsilonWorkChain`."""
+
+    def _generate_workchain_epsilon():
+        from aiida.orm import Bool, Dict
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.epsilon'
+
+        scf_pw_inputs = generate_inputs_pw()
+        kpoints = scf_pw_inputs.pop('kpoints')
+        structure = scf_pw_inputs.pop('structure')
+        scf = {'pw': scf_pw_inputs, 'kpoints': kpoints}
+
+        nscf_pw_inputs = generate_inputs_pw()
+        nscf_pw_inputs.pop('kpoints')
+        nscf_pw_inputs.pop('structure')
+        nscf_pw_inputs['parameters']['CONTROL']['calculation'] = 'nscf'
+        # epsilon.x requires the NSCF to cover the full Brillouin zone without symmetry reduction.
+        nscf_pw_inputs['parameters']['SYSTEM']['nosym'] = True
+        nscf_pw_inputs['parameters']['SYSTEM']['noinv'] = True
+        nscf = {'pw': nscf_pw_inputs, 'kpoints': kpoints}
+
+        epsilon = {
+            'code': fixture_code('quantumespresso.epsilon'),
+            'parameters': Dict({'ENERGY_GRID': {'intersmear': 0.15, 'wmin': 0.0, 'wmax': 20.0, 'nw': 600}}),
+            'metadata': {'options': get_default_options()},
+        }
+
+        inputs = {
+            'structure': structure,
+            'scf': scf,
+            'nscf': nscf,
+            'epsilon': epsilon,
+            'dry_run': Bool(True),
+        }
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_epsilon

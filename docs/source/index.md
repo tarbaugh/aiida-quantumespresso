@@ -26,6 +26,7 @@ howto/run_ph
 howto/run_pwbands
 howto/run_pdos
 howto/run_conductivity
+howto/run_epsilon
 howto/customize_inputs
 ```
 

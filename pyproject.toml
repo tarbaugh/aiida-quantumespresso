@@ -103,6 +103,7 @@ aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 'quantumespresso.matdyn.base' = 'aiida_quantumespresso.workflows.matdyn.base:MatdynBaseWorkChain'
 'quantumespresso.pdos' = 'aiida_quantumespresso.workflows.pdos:PdosWorkChain'
 'quantumespresso.conductivity' = 'aiida_quantumespresso.workflows.conductivity:ConductivityWorkChain'
+'quantumespresso.epsilon' = 'aiida_quantumespresso.workflows.epsilon:EpsilonWorkChain'
 'quantumespresso.bands.base' = 'aiida_quantumespresso.workflows.bands.base:BandsBaseWorkChain'
 'quantumespresso.neb.base' = 'aiida_quantumespresso.workflows.neb.base:NebBaseWorkChain'
 
