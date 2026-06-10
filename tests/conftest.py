@@ -1162,3 +1162,40 @@ def generate_workchain_phonon_bands(generate_workchain, generate_inputs_pw, gene
         return generate_workchain(entry_point, inputs)
 
     return _generate_workchain_phonon_bands
+
+
+@pytest.fixture
+def generate_workchain_relax_comparison(generate_workchain, generate_inputs_pw, fixture_code):
+    """Generate an instance of a `RelaxComparisonWorkChain`."""
+
+    def _generate_workchain_relax_comparison():
+        from aiida.orm import Bool, Dict
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.relax_comparison'
+
+        pw_inputs = generate_inputs_pw()
+        kpoints = pw_inputs.pop('kpoints')
+        structure = pw_inputs.pop('structure')
+        pw_inputs['parameters']['CONTROL']['calculation'] = 'vc-relax'
+        pw_inputs['parameters']['CELL'] = {'press_conv_thr': 0.5}
+        qe = {'base_relax': {'pw': pw_inputs, 'kpoints': kpoints}}
+
+        ml = {
+            'code': fixture_code('quantumespresso.ase'),
+            'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
+            'parameters': Dict({'fmax': 0.01}),
+            'metadata': {'options': get_default_options()},
+        }
+
+        inputs = {
+            'structure': structure,
+            'qe': qe,
+            'ml': ml,
+            'dry_run': Bool(True),
+        }
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_relax_comparison
