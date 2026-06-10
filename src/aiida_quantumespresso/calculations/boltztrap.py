@@ -39,10 +39,8 @@ def validate_parameters(value, _):
 class BoltztrapCalculation(CalcJob):
     """`CalcJob` implementation for the ``btp2`` executable of BoltzTraP2."""
 
-    # Location of the Quantum ESPRESSO output written by the parent `PwCalculation`. The ``pw.x`` plugin always uses the
-    # prefix ``aiida`` and the output subfolder ``./out/``, so the XML schema file is at ``out/aiida.save/<xml>``.
-    _PARENT_OUTPUT_SUBFOLDER = './out/'
-    _PREFIX = 'aiida'
+    # Name of the XML schema file written by Quantum ESPRESSO (>= 6.2) in the `<prefix>.save` directory. The output
+    # subfolder and prefix themselves are derived from the parent calculation in `prepare_for_submission`.
     _XML_FILE = 'data-file-schema.xml'
 
     # Subfolder created in the working directory in which the DFT XML is staged and passed to ``btp2 interpolate``.
@@ -199,9 +197,33 @@ class BoltztrapCalculation(CalcJob):
         # the parent XML file is copied into it.
         folder.get_subfolder(self._INPUT_SUBFOLDER, create=True)
 
+        # Validate the parent folder and derive the location of the XML file from the calculation that created it,
+        # rather than assuming the default pw.x layout: a missing source in the `remote_copy_list` is silently ignored
+        # at upload time, which would otherwise surface only as a cryptic `btp2` failure.
         parent_folder = self.inputs.parent_folder
+        parent_calcs = parent_folder.base.links.get_incoming(node_class=orm.CalcJobNode).all()
+
+        if not parent_calcs:
+            raise exceptions.NotExistent(f'parent_folder<{parent_folder.pk}> has no parent calculation')
+        if len(parent_calcs) > 1:
+            raise exceptions.UniquenessError(f'parent_folder<{parent_folder.pk}> has multiple parent calculations')
+
+        parent_calc = parent_calcs[0].node
+
+        try:
+            parent_output_subfolder = parent_calc.process_class._OUTPUT_SUBFOLDER  # noqa: SLF001
+            parent_prefix = parent_calc.process_class._PREFIX  # noqa: SLF001
+        except (ValueError, AttributeError) as exception:
+            raise exceptions.InputValidationError(
+                f'the parent calculation `{parent_calc.process_type}` of parent_folder<{parent_folder.pk}> does not '
+                'define an output subfolder and prefix, so the location of the Quantum ESPRESSO XML file cannot be '
+                'determined: the `parent_folder` should be the `remote_folder` of a completed `PwCalculation`.'
+            ) from exception
+
+        parent_output_subfolder = settings.pop('PARENT_CALC_OUT_SUBFOLDER', parent_output_subfolder)
+
         source_xml = pathlib.Path(parent_folder.get_remote_path()).joinpath(
-            self._PARENT_OUTPUT_SUBFOLDER, f'{self._PREFIX}.save', self._XML_FILE
+            parent_output_subfolder, f'{parent_prefix}.save', self._XML_FILE
         )
         dest_xml = str(pathlib.Path(self._INPUT_SUBFOLDER) / self._XML_FILE)
 

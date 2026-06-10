@@ -80,6 +80,11 @@ class BoltztrapParser(BaseParser):
             else:
                 if halltens.shape == (npoints, 30):
                     array_data.set_array('hall_tensor', halltens[:, 3:].reshape(npoints, 3, 3, 3))
+                else:
+                    logs.warning.append(
+                        f'The `.halltens` file has unexpected shape {halltens.shape} instead of ({npoints}, 30); '
+                        'skipping the Hall tensor.'
+                    )
 
         self.out('transport_coefficients', array_data)
 

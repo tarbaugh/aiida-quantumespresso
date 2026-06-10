@@ -61,7 +61,10 @@ def test_default(
     mock_wknode.set_process_state(engine.ProcessState.FINISHED)
     mock_wknode.store()
 
-    nscf_remote = generate_remote_data(computer=fixture_localhost, remote_path='/path/on/remote')
+    # The remote must have a `PwCalculation` creator: the `BoltztrapCalculation` derives the XML location from it.
+    nscf_remote = generate_remote_data(
+        computer=fixture_localhost, remote_path='/path/on/remote', entry_point_name='quantumespresso.pw'
+    )
     nscf_remote.store()
     nscf_remote.base.links.add_incoming(mock_wknode, link_type=LinkType.RETURN, link_label='remote_folder')
 
@@ -72,7 +75,6 @@ def test_default(
     wkchain.ctx.workchain_nscf = mock_wknode
 
     assert wkchain.inspect_nscf() is None
-    assert 'nscf_fermi' in wkchain.ctx
     assert wkchain.ctx.nscf_parent_folder.pk == nscf_remote.pk
 
     # run boltztrap (the dry-run returns the inputs); check that the `BoltztrapCalculation` accepts them

@@ -131,3 +131,16 @@ def test_boltztrap_invalid_parameters(fixture_sandbox, generate_calc_job, genera
     inputs = generate_inputs(parameters=parameters)
     with pytest.raises(ValueError, match=r'at most one of `interpolate.multiplier` or `interpolate.kpoints`'):
         generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)
+
+
+def test_boltztrap_invalid_parent(
+    tmp_path, fixture_sandbox, fixture_localhost, generate_calc_job, generate_inputs, generate_remote_data
+):
+    """Test that a ``parent_folder`` that was not created by a calculation is rejected with a clear error."""
+    from aiida.common import exceptions
+
+    inputs = generate_inputs()
+    inputs['parent_folder'] = generate_remote_data(fixture_localhost, str(tmp_path))  # no creator calculation
+
+    with pytest.raises(exceptions.NotExistent, match=r'has no parent calculation'):
+        generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)

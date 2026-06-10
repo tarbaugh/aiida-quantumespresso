@@ -33,12 +33,22 @@ def validate_scf(value, _):
 
 
 def validate_nscf(value, _):
-    """Validate the NSCF parameters."""
+    """Validate the NSCF parameters.
+
+    Tetrahedra occupations are recommended for the NSCF, since they provide the most accurate Brillouin-zone
+    integration for the transport calculation, but BoltzTraP2 itself only requires the eigenvalues and the Fermi
+    level, so other occupation schemes (e.g. smearing for metals) are accepted with a warning.
+    """
+    import warnings
+
     parameters = value['pw']['parameters'].get_dict()
     if parameters.get('CONTROL', {}).get('calculation', 'scf') != 'nscf':
         return '`CONTROL.calculation` in `nscf.pw.parameters` is not set to `nscf`.'
     if not parameters.get('SYSTEM', {}).get('occupations', '').startswith('tetrahedra'):
-        return '`SYSTEM.occupations` in `nscf.pw.parameters` is not set to one of the `tetrahedra` options.'
+        warnings.warn(
+            '`SYSTEM.occupations` in `nscf.pw.parameters` is not set to one of the `tetrahedra` options, which are '
+            'recommended for an accurate Fermi level and transport integration.'
+        )
 
 
 def validate_inputs(value, _):
@@ -300,13 +310,6 @@ class ConductivityWorkChain(ProtocolMixin, WorkChain):
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED_NSCF
 
         self.ctx.nscf_parent_folder = workchain.outputs.remote_folder
-
-        if 'fermi_energy' in workchain.outputs.output_parameters.dict:
-            self.ctx.nscf_fermi = workchain.outputs.output_parameters.dict.fermi_energy
-        else:
-            fermi_energy_up = workchain.outputs.output_parameters.dict.fermi_energy_up
-            fermi_energy_down = workchain.outputs.output_parameters.dict.fermi_energy_down
-            self.ctx.nscf_fermi = max(fermi_energy_down, fermi_energy_up)
 
     def run_boltztrap(self):
         """Run the BoltzTraP2 calculation, to compute the transport coefficients."""

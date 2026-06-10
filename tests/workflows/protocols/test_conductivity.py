@@ -52,11 +52,19 @@ def test_nscf_no_nosym(get_conductivity_generator_inputs):
     assert nscf_parameters['SYSTEM']['occupations'] == 'tetrahedra_opt'
 
 
-def test_nscf_smearing_raises(get_conductivity_generator_inputs):
-    """Test ``get_builder_from_protocol`` fails when the NSCF uses smearing occupations."""
+def test_nscf_smearing_warns(get_conductivity_generator_inputs):
+    """Test ``get_builder_from_protocol`` warns (but does not fail) when the NSCF does not use tetrahedra.
+
+    BoltzTraP2 only requires the eigenvalues and Fermi level, so smearing occupations (e.g. for metals) are accepted
+    with a warning, since tetrahedra are recommended for the most accurate transport integration.
+    """
     overrides = {'nscf': {'pw': {'parameters': {'SYSTEM': {'occupations': 'smearing'}}}}}
-    with pytest.raises(ValueError, match=r'`SYSTEM.occupations` in `nscf.pw.parameters`'):
-        ConductivityWorkChain.get_builder_from_protocol(**get_conductivity_generator_inputs, overrides=overrides)
+    with pytest.warns(UserWarning, match=r'`SYSTEM.occupations` in `nscf.pw.parameters`'):
+        builder = ConductivityWorkChain.get_builder_from_protocol(
+            **get_conductivity_generator_inputs, overrides=overrides
+        )
+
+    assert builder.nscf['pw']['parameters'].get_dict()['SYSTEM']['occupations'] == 'smearing'
 
 
 def test_options(get_conductivity_generator_inputs):

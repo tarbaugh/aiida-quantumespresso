@@ -38,6 +38,23 @@ def test_boltztrap_default(fixture_localhost, generate_parser, generate_calc_job
     assert transport.get_array('hall_tensor').shape == (4, 3, 3, 3)
 
 
+def test_boltztrap_hall_invalid_shape(fixture_localhost, generate_parser, generate_calc_job_node):
+    """Test that a readable ``.halltens`` file with an unexpected shape is skipped with a warning, not silently."""
+    from aiida import orm
+
+    node = generate_calc_job_node('quantumespresso.boltztrap', fixture_localhost, 'hall_invalid_shape')
+    parser = generate_parser('quantumespresso.boltztrap')
+    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
+
+    # The calculation still succeeds: the Hall tensor is optional ...
+    assert calcfunction.is_finished_ok, calcfunction.exit_message
+    assert 'hall_tensor' not in results['transport_coefficients'].get_arraynames()
+
+    # ... but the user is warned about the malformed file.
+    logs = [log.message for log in orm.Log.collection.get_logs_for(node)]
+    assert any('unexpected shape' in message for message in logs), logs
+
+
 def test_boltztrap_failed_missing_output(fixture_localhost, generate_parser, generate_calc_job_node):
     """Test parsing a ``BoltztrapCalculation`` for which the transport output files are missing."""
     node = generate_calc_job_node('quantumespresso.boltztrap', fixture_localhost, 'failed_missing_output')
