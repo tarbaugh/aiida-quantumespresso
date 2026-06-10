@@ -60,3 +60,22 @@ def test_ase_failed_calculator(fixture_localhost, generate_parser, generate_calc
     assert calcfunction.is_failed, calcfunction.exit_status
     assert calcfunction.exit_status == node.process_class.exit_codes.ERROR_CALCULATOR_FAILED.status
     assert 'ModuleNotFoundError' in calcfunction.exit_message
+
+
+def test_ase_phonons(fixture_localhost, generate_parser, generate_calc_job_node, generate_inputs_calculator):
+    """Test parsing the output of a successful phonons ``AseCalculation`` (real EMT Cu fixture)."""
+    node = generate_calc_job_node('quantumespresso.ase', fixture_localhost, 'phonons', generate_inputs_calculator)
+    parser = generate_parser('quantumespresso.ase')
+    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
+
+    assert calcfunction.is_finished_ok, calcfunction.exit_message
+
+    bands = results['output_phonon_bands']
+    frequencies = bands.get_array('bands')
+    assert frequencies.shape == (31, 3)  # 31 q-points, 3 branches (1 atom)
+    assert bands.labels  # high-symmetry point labels are attached
+
+    parameters = results['output_parameters'].get_dict()
+    assert parameters['phonon_frequency_units'] == 'THz'
+    assert 6.0 < parameters['phonon_max_frequency'] < 10.0  # EMT Cu
+    assert parameters['phonon_min_frequency'] > -0.5

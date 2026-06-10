@@ -3,7 +3,7 @@ import importlib
 import json
 import traceback
 
-CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {"fmax": 0.01, "hydrostatic_strain": false, "optimizer": "BFGS", "relax_cell": true, "steps": 200}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "relax"}""")
+CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {"displacement": 0.05, "path_npoints": 31, "supercell": [2, 2, 2]}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "phonons"}""")
 
 results = {'task': CONFIG['task']}
 

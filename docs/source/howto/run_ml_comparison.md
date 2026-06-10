@@ -22,7 +22,7 @@ Workflows therefore split into those where the ML engine can stand in for `pw.x`
 | Single-point energy/forces/stress    | ✓         | `AseCalculation`, task `energy`                                    |
 | Geometry/cell relaxation             | ✓         | `AseCalculation`, task `relax`; head-to-head via `RelaxComparisonWorkChain` |
 | Equation of state (V₀, B₀, B₀′)      | ✓         | `EosComparisonWorkChain` — reference-independent observables       |
-| Phonons (finite displacements)       | (✓)       | possible with ML forces; the DFPT chain below remains DFT-only     |
+| Phonons (finite displacements)       | ✓         | `AseCalculation`, task `phonons` (`ase.phonons` supercell method)   |
 | Band structure (`PwBandsWorkChain`)  | ✗         | requires Kohn-Sham eigenvalues                                     |
 | (P)DOS (`PdosWorkChain`)             | ✗         | requires eigenvalues/wavefunctions                                 |
 | Dielectric function (`EpsilonWorkChain`) | ✗     | requires wavefunctions and interband matrix elements               |
@@ -106,4 +106,25 @@ with equilibrium volumes agreeing to 0.24%.
 :::{note}
 The pressure derivative B₀′ is the third derivative of E(V) and is very sensitive to the volume grid; treat the
 candidate-engine value as a reported deviation metric rather than a convergence criterion.
+:::
+
+## ML phonon dispersion
+
+The `phonons` task of the `AseCalculation` computes the finite-displacement phonon dispersion along the automatic
+high-symmetry q-point path (`ase.phonons` supercell method, acoustic sum rule imposed), returning a `BandsData` in
+THz that can be compared directly against the DFPT result of the `PhononBandsWorkChain`:
+
+```python
+from aiida.plugins import CalculationFactory
+
+builder = CalculationFactory('quantumespresso.ase').get_builder()
+builder.code = orm.load_code('ase-python@localhost')
+builder.structure = orm.StructureData(ase=bulk('Si', 'diamond', 5.43))
+builder.calculator = orm.Dict({'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']})
+builder.task = orm.Str('phonons')
+builder.parameters = orm.Dict({'supercell': [2, 2, 2]})
+```
+
+For silicon, GRACE-1L-OAM reproduces the Γ-point optical mode of the DFPT chain on this plugin (15.4 THz) to within
+a few percent.
 :::

@@ -62,6 +62,25 @@ class AseParser(Parser):
             parameters['pressure'] = float(-np.trace(stress) / 3.0)
             parameters['pressure_units'] = 'GPa'
 
+        if results['task'] == 'phonons':
+            frequencies = np.array(results['phonon_frequencies'], dtype=float)
+            qpoints = np.array(results['phonon_qpoints'], dtype=float)
+
+            labels = []
+            for name, coordinate in results['phonon_special_points'].items():
+                matches = np.where(np.all(np.isclose(qpoints, np.array(coordinate)), axis=1))[0]
+                labels.extend((int(index), name) for index in matches)
+
+            bands = orm.BandsData()
+            bands.set_kpoints(qpoints, labels=sorted(labels))
+            bands.set_bands(frequencies, units='THz')
+            self.out('output_phonon_bands', bands)
+
+            parameters['phonon_max_frequency'] = float(frequencies.max())
+            parameters['phonon_min_frequency'] = float(frequencies.min())
+            parameters['phonon_frequency_units'] = 'THz'
+            parameters['phonon_path'] = results['phonon_path']
+
         if results['task'] == 'relax':
             parameters['converged'] = results['converged']
             parameters['n_steps'] = results['n_steps']

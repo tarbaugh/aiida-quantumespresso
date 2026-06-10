@@ -71,6 +71,26 @@ try:
         results['n_steps'] = int(optimizer.get_number_of_steps())
         write(CONFIG['output_structure_filename'], atoms, format='extxyz')
 
+    elif CONFIG['task'] == 'phonons':
+        from ase.phonons import Phonons
+
+        parameters = CONFIG['parameters']
+        phonons = Phonons(
+            atoms, atoms.calc, supercell=tuple(parameters['supercell']), delta=parameters['displacement']
+        )
+        phonons.run()
+        phonons.read(acoustic=True)
+        phonons.clean()
+
+        path = atoms.cell.bandpath(npoints=parameters['path_npoints'])
+        band_structure = phonons.get_band_structure(path)
+
+        EV_TO_THZ = 241.79893
+        results['phonon_qpoints'] = path.kpts.tolist()
+        results['phonon_path'] = path.path
+        results['phonon_special_points'] = {name: kpt.tolist() for name, kpt in path.special_points.items()}
+        results['phonon_frequencies'] = (band_structure.energies[0] * EV_TO_THZ).tolist()
+
     results['energy'] = float(atoms.get_potential_energy())
     results['forces'] = atoms.get_forces().tolist()
     try:
@@ -117,7 +137,8 @@ def validate_parameters(value, _):
         return
 
     parameters = value.get_dict()
-    unknown = set(parameters.keys()) - set(AseCalculation._DEFAULT_RELAX_PARAMETERS.keys())  # noqa: SLF001
+    supported = set(AseCalculation._DEFAULT_RELAX_PARAMETERS) | set(AseCalculation._DEFAULT_PHONONS_PARAMETERS)  # noqa: SLF001
+    unknown = set(parameters.keys()) - supported
     if unknown:
         return f'the `parameters` dictionary contains unsupported keys: {", ".join(sorted(unknown))}.'
 
@@ -125,7 +146,7 @@ def validate_parameters(value, _):
 class AseCalculation(CalcJob):
     """`CalcJob` implementation running an arbitrary ASE calculator, e.g. a machine-learning potential."""
 
-    _TASKS = ('energy', 'relax')
+    _TASKS = ('energy', 'relax', 'phonons')
 
     _SCRIPT_FILENAME = 'aiida_ase_script.py'
     _STRUCTURE_FILENAME = 'structure.xyz'
@@ -142,6 +163,13 @@ class AseCalculation(CalcJob):
         'steps': 200,  # maximum number of optimizer steps
         'relax_cell': True,  # relax the cell vectors (via the `FrechetCellFilter`) along with the positions
         'hydrostatic_strain': False,  # constrain the cell relaxation to isotropic scaling
+    }
+
+    # Default parameters of the `phonons` task (finite displacements with `ase.phonons.Phonons`).
+    _DEFAULT_PHONONS_PARAMETERS = {
+        'supercell': [2, 2, 2],  # supercell repetitions for the finite displacements
+        'displacement': 0.05,  # Å, finite-displacement amplitude
+        'path_npoints': 31,  # number of q-points along the automatic high-symmetry band path
     }
 
     @classmethod
@@ -166,8 +194,9 @@ class AseCalculation(CalcJob):
             serializer=to_aiida_type,
             default=lambda: orm.Str('energy'),
             validator=validate_task,
-            help="The task to perform: 'energy' (single-point energy/forces/stress) or 'relax' (geometry "
-            'optimization with an ASE optimizer).',
+            help="The task to perform: 'energy' (single-point energy/forces/stress), 'relax' (geometry "
+            "optimization with an ASE optimizer) or 'phonons' (finite-displacement phonon dispersion along the "
+            'automatic high-symmetry q-point path).',
         )
         spec.input(
             'parameters',
@@ -190,6 +219,12 @@ class AseCalculation(CalcJob):
             valid_type=orm.StructureData,
             required=False,
             help='The relaxed structure (only for the `relax` task).',
+        )
+        spec.output(
+            'output_phonon_bands',
+            valid_type=orm.BandsData,
+            required=False,
+            help='The finite-displacement phonon dispersion in THz (only for the `phonons` task).',
         )
         spec.default_output_node = 'output_parameters'
 
@@ -217,8 +252,20 @@ class AseCalculation(CalcJob):
     @classmethod
     def get_relax_parameters(cls, overrides=None):
         """Return the default parameters of the ``relax`` task, optionally merged with the given overrides."""
-        parameters = dict(cls._DEFAULT_RELAX_PARAMETERS)
-        parameters.update(overrides or {})
+        return cls.get_task_parameters('relax', overrides)
+
+    @classmethod
+    def get_task_parameters(cls, task, overrides=None):
+        """Return the default parameters of the given task, optionally merged with the given overrides."""
+        defaults = {
+            'energy': {},
+            'relax': cls._DEFAULT_RELAX_PARAMETERS,
+            'phonons': cls._DEFAULT_PHONONS_PARAMETERS,
+        }
+        # Only the keys of the task at hand are forwarded, so that a single `parameters` dictionary carrying the
+        # settings of several tasks can be reused across calculations.
+        parameters = dict(defaults[task])
+        parameters.update({key: value for key, value in (overrides or {}).items() if key in parameters})
         return parameters
 
     def prepare_for_submission(self, folder):
@@ -237,8 +284,8 @@ class AseCalculation(CalcJob):
             'structure_filename': self._STRUCTURE_FILENAME,
             'results_filename': self._RESULTS_FILENAME,
             'output_structure_filename': self._OUTPUT_STRUCTURE_FILENAME,
-            'parameters': self.get_relax_parameters(
-                self.inputs.parameters.get_dict() if 'parameters' in self.inputs else None
+            'parameters': self.get_task_parameters(
+                task, self.inputs.parameters.get_dict() if 'parameters' in self.inputs else None
             ),
         }
 

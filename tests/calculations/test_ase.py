@@ -27,7 +27,7 @@ def generate_inputs(fixture_code, generate_structure):
     return _factory
 
 
-@pytest.mark.parametrize('task', ['energy', 'relax'])
+@pytest.mark.parametrize('task', ['energy', 'relax', 'phonons'])
 def test_ase_default(fixture_sandbox, generate_calc_job, generate_inputs, file_regression, task):
     """Test a default ``AseCalculation`` for both tasks."""
     calc_info = generate_calc_job(fixture_sandbox, 'quantumespresso.ase', generate_inputs(task=task))
@@ -68,6 +68,19 @@ def test_ase_relax_parameters(fixture_sandbox, generate_calc_job, generate_input
     assert '"optimizer": "FIRE"' in script
     assert '"relax_cell": false' in script
     assert '"steps": 200' in script  # default preserved
+
+
+def test_ase_phonons_parameters(fixture_sandbox, generate_calc_job, generate_inputs):
+    """Test that phonon parameter overrides are merged over the defaults and relax keys are not forwarded."""
+    inputs = generate_inputs(task='phonons', parameters={'supercell': [3, 3, 3], 'fmax': 0.05})
+    generate_calc_job(fixture_sandbox, 'quantumespresso.ase', inputs)
+
+    with fixture_sandbox.open('aiida_ase_script.py') as handle:
+        script = handle.read()
+
+    assert '"supercell": [3, 3, 3]' in script
+    assert '"displacement": 0.05' in script  # default preserved
+    assert '"fmax"' not in script  # relax-task key not forwarded to the phonons task
 
 
 @pytest.mark.parametrize(

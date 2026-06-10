@@ -3,7 +3,7 @@ import importlib
 import json
 import traceback
 
-CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {"fmax": 0.01, "hydrostatic_strain": false, "optimizer": "BFGS", "relax_cell": true, "steps": 200}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "energy"}""")
+CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "energy"}""")
 
 results = {'task': CONFIG['task']}
 
@@ -34,6 +34,26 @@ try:
         results['converged'] = bool(converged)
         results['n_steps'] = int(optimizer.get_number_of_steps())
         write(CONFIG['output_structure_filename'], atoms, format='extxyz')
+
+    elif CONFIG['task'] == 'phonons':
+        from ase.phonons import Phonons
+
+        parameters = CONFIG['parameters']
+        phonons = Phonons(
+            atoms, atoms.calc, supercell=tuple(parameters['supercell']), delta=parameters['displacement']
+        )
+        phonons.run()
+        phonons.read(acoustic=True)
+        phonons.clean()
+
+        path = atoms.cell.bandpath(npoints=parameters['path_npoints'])
+        band_structure = phonons.get_band_structure(path)
+
+        EV_TO_THZ = 241.79893
+        results['phonon_qpoints'] = path.kpts.tolist()
+        results['phonon_path'] = path.path
+        results['phonon_special_points'] = {name: kpt.tolist() for name, kpt in path.special_points.items()}
+        results['phonon_frequencies'] = (band_structure.energies[0] * EV_TO_THZ).tolist()
 
     results['energy'] = float(atoms.get_potential_energy())
     results['forces'] = atoms.get_forces().tolist()
