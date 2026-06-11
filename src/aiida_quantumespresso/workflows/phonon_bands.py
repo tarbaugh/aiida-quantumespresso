@@ -185,7 +185,10 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
         """
         from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
 
+        from aiida_quantumespresso.utils.ase import as_structure_data
+
         inputs = cls.get_protocol_inputs(protocol, overrides)
+        structure = as_structure_data(structure)
 
         scf = PwBaseWorkChain.get_builder_from_protocol(
             pw_code, structure, protocol, overrides=inputs.get('scf', None), options=options, **kwargs

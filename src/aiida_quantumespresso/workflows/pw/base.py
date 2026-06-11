@@ -196,7 +196,10 @@ class PwBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         if initial_magnetic_moments is not None and spin_type == SpinType.NONE:
             raise ValueError(f'`initial_magnetic_moments` is specified but spin type `{spin_type}` is incompatible.')
 
+        from aiida_quantumespresso.utils.ase import as_structure_data
+
         inputs = cls.get_protocol_inputs(protocol, overrides)
+        structure = as_structure_data(structure)
 
         meta_parameters = inputs.pop('meta_parameters')
         pseudo_family = inputs.pop('pseudo_family')

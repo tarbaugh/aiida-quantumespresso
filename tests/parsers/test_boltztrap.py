@@ -75,3 +75,34 @@ def test_boltztrap_failed_invalid_format(fixture_localhost, generate_parser, gen
     assert calcfunction.is_finished, calcfunction.exception
     assert calcfunction.is_failed, calcfunction.exit_status
     assert calcfunction.exit_status == node.process_class.exit_codes.ERROR_OUTPUT_FILES_INVALID_FORMAT.status
+
+
+def test_boltztrap_header_anchored(fixture_localhost, generate_parser, generate_calc_job_node):
+    """Test that the columns are anchored on the header names rather than on their position.
+
+    The ``reordered`` fixture holds the same data as ``default`` but with the ``T``/``N`` columns of the ``.trace``
+    file and the ``S``/``kappae/tau0`` tensor blocks of the ``.condtens`` file swapped (headers updated to match);
+    the ``no_header`` fixture holds the default data with the comment lines stripped, exercising the positional
+    fallback. Both have to parse to the same arrays as the default fixture.
+    """
+    import numpy as np
+
+    parser = generate_parser('quantumespresso.boltztrap')
+
+    reference, calcfunction = parser.parse_from_node(
+        generate_calc_job_node('quantumespresso.boltztrap', fixture_localhost, 'default'), store_provenance=False
+    )
+    assert calcfunction.is_finished_ok, calcfunction.exit_message
+
+    for test_name in ('reordered', 'no_header'):
+        results, calcfunction = parser.parse_from_node(
+            generate_calc_job_node('quantumespresso.boltztrap', fixture_localhost, test_name), store_provenance=False
+        )
+        assert calcfunction.is_finished_ok, (test_name, calcfunction.exit_message)
+
+        transport = results['transport_coefficients']
+        transport_reference = reference['transport_coefficients']
+        for name in ('temperature', 'carrier_concentration', 'seebeck_tensor', 'thermal_conductivity_tensor'):
+            np.testing.assert_allclose(
+                transport.get_array(name), transport_reference.get_array(name), err_msg=f'{test_name}: {name}'
+            )

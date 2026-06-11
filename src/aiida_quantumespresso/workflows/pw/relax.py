@@ -134,7 +134,10 @@ class PwRelaxWorkChain(ProtocolMixin, WorkChain):
         """
         type_check(relax_type, RelaxType)
 
+        from aiida_quantumespresso.utils.ase import as_structure_data
+
         inputs = cls.get_protocol_inputs(protocol, overrides)
+        structure = as_structure_data(structure)
 
         args = (code, structure, protocol)
         base_relax = PwBaseWorkChain.get_builder_from_protocol(

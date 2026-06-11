@@ -98,7 +98,10 @@ class EpsilonWorkChain(ScfNscfWorkChain):
         """
         from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
 
+        from aiida_quantumespresso.utils.ase import as_structure_data
+
         inputs = cls.get_protocol_inputs(protocol, overrides)
+        structure = as_structure_data(structure)
 
         scf, nscf = cls.get_scf_nscf_builders(pw_code, structure, protocol, inputs, options=options, **kwargs)
 

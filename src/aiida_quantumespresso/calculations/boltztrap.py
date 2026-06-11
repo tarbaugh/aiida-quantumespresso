@@ -20,7 +20,7 @@ import pathlib
 from aiida import orm
 from aiida.common import datastructures, exceptions
 
-from aiida_quantumespresso.calculations import _uppercase_dict
+from aiida_quantumespresso.calculations import _pop_parser_options, _uppercase_dict
 from aiida_quantumespresso.calculations.base import CalcJob
 
 
@@ -298,6 +298,8 @@ class BoltztrapCalculation(CalcJob):
             self._CONDTENS_FILE,
             self._HALLTENS_FILE,
         ]
+
+        _pop_parser_options(self, settings)
 
         if settings:
             unknown_keys = ', '.join(list(settings.keys()))

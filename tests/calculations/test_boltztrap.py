@@ -144,3 +144,9 @@ def test_boltztrap_invalid_parent(
 
     with pytest.raises(exceptions.NotExistent, match=r'has no parent calculation'):
         generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)
+
+
+def test_boltztrap_parser_options_settings(fixture_sandbox, generate_calc_job, generate_inputs):
+    """Test that ``PARSER_OPTIONS`` in the settings are popped instead of being rejected as an unknown key."""
+    inputs = generate_inputs(settings={'PARSER_OPTIONS': {'some_option': True}})
+    generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)  # must not raise

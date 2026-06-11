@@ -155,7 +155,10 @@ class PwBandsWorkChain(ProtocolMixin, WorkChain):
             sub processes that are called by this workchain.
         :return: a process builder instance with all inputs defined ready for launch.
         """
+        from aiida_quantumespresso.utils.ase import as_structure_data
+
         inputs = cls.get_protocol_inputs(protocol, overrides)
+        structure = as_structure_data(structure)
 
         args = (code, structure, protocol)
         scf = PwBaseWorkChain.get_builder_from_protocol(
