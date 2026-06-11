@@ -5,7 +5,7 @@ import traceback
 
 CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "energy"}""")
 
-results = {'task': CONFIG['task']}
+results = {'task': CONFIG['task'], 'calculator': CONFIG['calculator']}
 
 try:
     from ase.io import read, write

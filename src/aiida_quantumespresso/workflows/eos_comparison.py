@@ -58,7 +58,12 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
     def define(cls, spec):
         """Define the process specification."""
         super().define(spec)
-        spec.input('structure', valid_type=orm.StructureData, help='The input structure at its reference volume.')
+        spec.input(
+            'structure',
+            valid_type=orm.StructureData,
+            serializer=to_aiida_type,
+            help='The input structure at its reference volume; an `ase.Atoms` instance is converted automatically.',
+        )
         spec.input(
             'scale_factors',
             valid_type=orm.List,
@@ -133,9 +138,10 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
         :param pw_code: the ``Code`` instance configured for the ``quantumespresso.pw`` plugin.
         :param ase_code: the ``Code`` instance (a Python interpreter with ASE and the calculator package) configured
             for the ``quantumespresso.ase`` plugin.
-        :param structure: the ``StructureData`` instance to use.
-        :param calculator: the ASE calculator import specification (plain ``dict`` or ``Dict``), e.g.
-            ``{'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']}``.
+        :param structure: the ``StructureData`` instance to use; an ``ase.Atoms`` instance is converted automatically.
+        :param calculator: the ASE calculator: a shorthand string, e.g. ``'emt'`` or ``'grace:GRACE-1L-OAM'``, or an
+            import specification, e.g. ``{'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args':
+            ['GRACE-1L-OAM']}`` (as plain ``dict``/``str`` or as a node).
         :param protocol: protocol to use, if not specified, the default will be used.
         :param overrides: optional dictionary of inputs to override the defaults of the protocol.
         :param options: A dictionary of options that will be recursively set for the ``metadata.options`` input of all
@@ -144,9 +150,11 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
             sub processes that are called by this workchain.
         :return: a process builder instance with all inputs defined ready for launch.
         """
+        from aiida_quantumespresso.utils.ase import as_structure_data
         from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
 
         inputs = cls.get_protocol_inputs(protocol, overrides)
+        structure = as_structure_data(structure)
 
         qe = PwBaseWorkChain.get_builder_from_protocol(
             pw_code, structure, protocol, overrides=inputs.get('qe', None), options=options, **kwargs
@@ -167,7 +175,7 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
         builder.scale_factors = orm.List(inputs['scale_factors'])
         builder.qe = qe
         builder.ml.code = ase_code
-        builder.ml.calculator = calculator if isinstance(calculator, orm.Dict) else orm.Dict(calculator)
+        builder.ml.calculator = calculator  # the port serializer wraps plain strings and dictionaries
         builder.ml.metadata = metadata_ml
 
         return builder

@@ -87,7 +87,8 @@ def test_ase_phonons_parameters(fixture_sandbox, generate_calc_job, generate_inp
     ('key', 'value', 'match'),
     [
         ('calculator', {'callable': 'EMT'}, r'non-empty string for the `module` key'),
-        ('calculator', {'module': 'ase.calculators.emt', 'callable': 'EMT', 'args': 'GRACE'}, r'`calculator.args`'),
+        ('calculator', {'module': 'ase.calculators.emt', 'callable': 'EMT', 'args': 'GRACE'}, r'`args` key'),
+        ('calculator', 'vasp', r'unknown calculator shorthand `vasp`'),
         ('task', 'bands', r'the `task` has to be one of'),
         ('parameters', {'fmax': 0.01, 'unknown': 1}, r'unsupported keys: unknown'),
     ],
@@ -96,7 +97,7 @@ def test_ase_invalid_inputs(fixture_sandbox, generate_calc_job, generate_inputs,
     """Test the input validators."""
     inputs = generate_inputs()
     if key == 'calculator':
-        inputs['calculator'] = orm.Dict(value)
+        inputs['calculator'] = orm.Dict(value) if isinstance(value, dict) else orm.Str(value)
     elif key == 'task':
         inputs['task'] = orm.Str(value)
     elif key == 'parameters':
@@ -104,3 +105,44 @@ def test_ase_invalid_inputs(fixture_sandbox, generate_calc_job, generate_inputs,
 
     with pytest.raises(ValueError, match=match):
         generate_calc_job(fixture_sandbox, 'quantumespresso.ase', inputs)
+
+
+def test_ase_calculator_shorthand(fixture_sandbox, generate_calc_job, generate_inputs):
+    """Test that a shorthand `calculator` string is resolved into the full specification in the script."""
+    inputs = generate_inputs()
+    inputs['calculator'] = orm.Str('grace:GRACE-2L-OAM')
+    generate_calc_job(fixture_sandbox, 'quantumespresso.ase', inputs)
+
+    with fixture_sandbox.open('aiida_ase_script.py') as handle:
+        script = handle.read()
+
+    assert 'tensorpotential.calculator' in script
+    assert 'grace_fm' in script
+    assert 'GRACE-2L-OAM' in script
+
+
+def test_ase_plain_python_inputs(fixture_sandbox, generate_calc_job, fixture_code):
+    """Test the zero-boilerplate interface: plain Python values for every input and no explicit options.
+
+    The structure is an ``ase.Atoms`` instance, the calculator a shorthand string, the task a plain string and the
+    parameters a plain dictionary; the port serializers convert all of them. The ``metadata.options`` are omitted
+    entirely, relying on the default resources.
+    """
+    from ase.build import bulk
+
+    inputs = {
+        'code': fixture_code('quantumespresso.ase'),
+        'structure': bulk('Si', 'diamond', 5.43),
+        'calculator': 'emt',
+        'task': 'relax',
+        'parameters': {'fmax': 0.05},
+    }
+    calc_info = generate_calc_job(fixture_sandbox, 'quantumespresso.ase', inputs)
+
+    assert isinstance(calc_info, datastructures.CalcInfo)
+
+    with fixture_sandbox.open('aiida_ase_script.py') as handle:
+        script = handle.read()
+
+    assert 'ase.calculators.emt' in script
+    assert '"fmax": 0.05' in script

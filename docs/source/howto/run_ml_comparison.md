@@ -49,15 +49,23 @@ which `ase` (and the ML potential package) is installed:
       --default-calc-job-plugin quantumespresso.ase
 ```
 
-The calculator is selected through **data, not code** — a dictionary with a dynamic import specification:
+The calculator is selected through **data, not code**. For well-known calculators a shorthand string suffices,
+optionally with a ``:<model>`` suffix:
+
+| Shorthand               | Calculator                                  | Requires (in the code's environment) |
+|-------------------------|---------------------------------------------|--------------------------------------|
+| `'emt'`, `'lj'`, `'morse'` | ASE built-ins (tests, quick checks)      | `ase` only                           |
+| `'grace'`, `'grace:GRACE-2L-OAM'` | GRACE foundation models (default `GRACE-1L-OAM`) | `tensorpotential`   |
+| `'mace'`, `'mace:large'` | MACE-MP foundation models (default `medium`) | `mace-torch`                        |
+| `'chgnet'`              | CHGNet                                       | `chgnet`                             |
+
+Any other ASE calculator is selected with a full import specification dictionary:
 
 ```python
-GRACE = {'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']}
-EMT = {'module': 'ase.calculators.emt', 'callable': 'EMT'}  # dependency-free, used in tests
+calculator = {'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']}
 ```
 
-Any ASE calculator works the same way (MACE, CHGNet, SevenNet, ...); GRACE foundation models download
-automatically on first use.
+GRACE and MACE foundation models download automatically on first use.
 
 ---
 
@@ -74,8 +82,8 @@ load_profile()
 builder = WorkflowFactory('quantumespresso.relax_comparison').get_builder_from_protocol(
     pw_code=orm.load_code('pw@localhost'),
     ase_code=orm.load_code('ase-python@localhost'),
-    structure=orm.StructureData(ase=bulk('Si', 'diamond', 5.43)),
-    calculator={'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']},
+    structure=bulk('Si', 'diamond', 5.43),  # `ase.Atoms` are converted automatically
+    calculator='grace',
     protocol='balanced',
 )
 node = submit(builder)
@@ -91,8 +99,8 @@ For silicon, GRACE-1L-OAM and pw.x (PBE) agree to within 0.1% in volume.
 builder = WorkflowFactory('quantumespresso.eos_comparison').get_builder_from_protocol(
     pw_code=orm.load_code('pw@localhost'),
     ase_code=orm.load_code('ase-python@localhost'),
-    structure=orm.StructureData(ase=bulk('Si', 'diamond', 5.43)),
-    calculator={'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']},
+    structure=bulk('Si', 'diamond', 5.43),
+    calculator='grace',
     protocol='balanced',  # 7 volumes; 'fast': 5, 'stringent': 9
 )
 node = submit(builder)
@@ -119,10 +127,10 @@ from aiida.plugins import CalculationFactory
 
 builder = CalculationFactory('quantumespresso.ase').get_builder()
 builder.code = orm.load_code('ase-python@localhost')
-builder.structure = orm.StructureData(ase=bulk('Si', 'diamond', 5.43))
-builder.calculator = orm.Dict({'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'args': ['GRACE-1L-OAM']})
-builder.task = orm.Str('phonons')
-builder.parameters = orm.Dict({'supercell': [2, 2, 2]})
+builder.structure = bulk('Si', 'diamond', 5.43)
+builder.calculator = 'grace'
+builder.task = 'phonons'
+builder.parameters = {'supercell': [2, 2, 2]}
 ```
 
 For silicon, GRACE-1L-OAM reproduces the Γ-point optical mode of the DFPT chain on this plugin (15.4 THz) to within

@@ -18,6 +18,7 @@ from aiida.common import AttributeDict
 from aiida.engine import ToContext, WorkChain, if_
 from aiida.orm.nodes.data.base import to_aiida_type
 
+import aiida_quantumespresso.utils.ase  # noqa: F401  - registers the `ase.Atoms` -> `StructureData` serializer
 from aiida_quantumespresso.calculations.functions.seekpath_structure_analysis import seekpath_structure_analysis
 from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
@@ -51,7 +52,12 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
     def define(cls, spec):
         """Define the process specification."""
         super().define(spec)
-        spec.input('structure', valid_type=orm.StructureData, help='The input structure.')
+        spec.input(
+            'structure',
+            valid_type=orm.StructureData,
+            serializer=to_aiida_type,
+            help='The input structure; an `ase.Atoms` instance is converted automatically.',
+        )
         spec.input(
             'clean_workdir',
             valid_type=orm.Bool,

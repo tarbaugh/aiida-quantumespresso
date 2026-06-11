@@ -6,6 +6,7 @@ import numpy as np
 from aiida import orm
 from aiida.parsers import Parser
 
+from aiida_quantumespresso.utils.ase import resolve_calculator
 from aiida_quantumespresso.utils.mapping import get_logging_container
 
 
@@ -47,7 +48,9 @@ class AseParser(Parser):
             arrays.set_array('stress', stress)
         self.out('output_forces', arrays)
 
-        calculator = self.node.inputs.calculator.get_dict()
+        # The results file echoes the calculator specification that was actually run; fall back to resolving the
+        # input node for results files written by older versions of the runner script.
+        calculator = results.get('calculator') or resolve_calculator(self.node.inputs.calculator)
         parameters = {
             'task': results['task'],
             'calculator': {key: calculator.get(key) for key in ('module', 'callable', 'args') if key in calculator},
