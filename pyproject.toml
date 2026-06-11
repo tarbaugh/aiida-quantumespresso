@@ -101,6 +101,7 @@ aiida-quantumespresso = 'aiida_quantumespresso.cli:cmd_root'
 'noncollinearhydrogen' = 'aiida_quantumespresso.tools.data.orbital.noncollinearhydrogen:NoncollinearHydrogenOrbital'
 
 [project.entry-points.'aiida.workflows']
+'quantumespresso.ase.base' = 'aiida_quantumespresso.workflows.ase.base:AseBaseWorkChain'
 'quantumespresso.ph.base' = 'aiida_quantumespresso.workflows.ph.base:PhBaseWorkChain'
 'quantumespresso.pw.base' = 'aiida_quantumespresso.workflows.pw.base:PwBaseWorkChain'
 'quantumespresso.pw.relax' = 'aiida_quantumespresso.workflows.pw.relax:PwRelaxWorkChain'

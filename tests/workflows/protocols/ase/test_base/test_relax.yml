@@ -1,0 +1,19 @@
+ase:
+  calculator: emt
+  code: test.quantumespresso.ase
+  metadata:
+    options:
+      max_wallclock_seconds: 3600
+      resources:
+        num_machines: 1
+      withmpi: false
+  parameters:
+    fmax: 0.01
+    hydrostatic_strain: false
+    optimizer: BFGS
+    relax_cell: true
+    steps: 200
+  structure: Si2
+  task: relax
+clean_workdir: false
+max_iterations: 5

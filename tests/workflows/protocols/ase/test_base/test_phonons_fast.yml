@@ -1,0 +1,20 @@
+ase:
+  calculator: emt
+  code: test.quantumespresso.ase
+  metadata:
+    options:
+      max_wallclock_seconds: 3600
+      resources:
+        num_machines: 1
+      withmpi: false
+  parameters:
+    displacement: 0.05
+    path_npoints: 31
+    supercell:
+    - 2
+    - 2
+    - 2
+  structure: Si2
+  task: phonons
+clean_workdir: false
+max_iterations: 5

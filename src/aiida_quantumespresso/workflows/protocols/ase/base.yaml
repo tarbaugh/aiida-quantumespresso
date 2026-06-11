@@ -1,0 +1,30 @@
+default_inputs:
+    clean_workdir: False
+    max_iterations: 5
+    ase:
+        metadata:
+            options:
+                max_wallclock_seconds: 3600  # One hour; ML evaluations are cheap, model loading dominates
+                withmpi: False  # ASE calculators (ML potentials in particular) parallelise over threads
+        parameters:
+            fmax: 0.01
+            supercell: [3, 3, 3]
+
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to perform the computation at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to perform the computation at high precision at higher computational cost.'
+        ase:
+            parameters:
+                fmax: 0.001
+                supercell: [4, 4, 4]
+    fast:
+        description: 'Protocol to perform the computation at low precision at minimal computational cost for testing purposes.'
+        ase:
+            parameters:
+                fmax: 0.05
+                supercell: [2, 2, 2]
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema: {}
