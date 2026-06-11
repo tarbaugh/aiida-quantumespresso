@@ -4,7 +4,8 @@ The two engines run in parallel on the same input structure:
 
 - Quantum ESPRESSO, through the :class:`~aiida_quantumespresso.workflows.pw.relax.PwRelaxWorkChain`.
 - An arbitrary ASE calculator (e.g. a GRACE foundation model), through the
-  :class:`~aiida_quantumespresso.calculations.ase.AseCalculation` with ``task='relax'``.
+  :class:`~aiida_quantumespresso.workflows.ase.base.AseBaseWorkChain` with ``task='relax'``, which restarts an
+  unconverged optimization automatically.
 
 The relaxed structures are then compared with geometric metrics (volume, cell lengths, atomic displacements) by the
 :func:`~aiida_quantumespresso.calculations.functions.compare_relaxed_structures.compare_relaxed_structures`
@@ -24,7 +25,7 @@ from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 from .protocols.utils import ProtocolMixin
 
 PwRelaxWorkChain = plugins.WorkflowFactory('quantumespresso.pw.relax')
-AseCalculation = plugins.CalculationFactory('quantumespresso.ase')
+AseBaseWorkChain = plugins.WorkflowFactory('quantumespresso.ase.base')
 
 
 class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
@@ -62,10 +63,10 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
             namespace_options={'help': 'Inputs for the Quantum ESPRESSO `PwRelaxWorkChain` engine.'},
         )
         spec.expose_inputs(
-            AseCalculation,
+            AseBaseWorkChain,
             namespace='ml',
-            exclude=('structure', 'task'),
-            namespace_options={'help': "Inputs for the ASE engine (the task is fixed to 'relax')."},
+            exclude=('clean_workdir', 'ase.structure', 'ase.task'),
+            namespace_options={'help': "Inputs for the ASE engine `AseBaseWorkChain` (the task is fixed to 'relax')."},
         )
 
         spec.outline(
@@ -79,7 +80,7 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         spec.exit_code(403, 'ERROR_SUB_PROCESS_FAILED_BOTH', message='both engine relaxations failed')
 
         spec.expose_outputs(PwRelaxWorkChain, namespace='qe')
-        spec.expose_outputs(AseCalculation, namespace='ml')
+        spec.expose_outputs(AseBaseWorkChain, namespace='ml')
         spec.output(
             'comparison',
             valid_type=orm.Dict,
@@ -117,7 +118,6 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         :return: a process builder instance with all inputs defined ready for launch.
         """
         from aiida_quantumespresso.utils.ase import as_structure_data
-        from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
 
         inputs = cls.get_protocol_inputs(protocol, overrides)
         structure = as_structure_data(structure)
@@ -128,23 +128,24 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         qe.pop('structure', None)
         qe.pop('clean_workdir', None)
 
-        metadata_ml = inputs.get('ml', {}).get('metadata', {'options': {}})
-
-        if options:
-            metadata_ml['options'] = recursive_merge(metadata_ml['options'], options)
-
-        metadata_ml['options'] = cls.set_default_resources(metadata_ml['options'], ase_code.computer.scheduler_type)
+        ml = AseBaseWorkChain.get_builder_from_protocol(
+            ase_code,
+            structure,
+            calculator,
+            task='relax',
+            protocol=protocol,
+            overrides=inputs.get('ml', None),
+            options=options,
+        )
+        ml['ase'].pop('structure', None)
+        ml['ase'].pop('task', None)
+        ml.pop('clean_workdir', None)
 
         builder = cls.get_builder()
         builder.structure = structure
         builder.clean_workdir = orm.Bool(inputs['clean_workdir'])
         builder.qe = qe
-        builder.ml.code = ase_code
-        builder.ml.calculator = calculator  # the port serializer wraps plain strings and dictionaries
-        builder.ml.parameters = orm.Dict(
-            AseCalculation.get_relax_parameters(inputs.get('ml', {}).get('parameters', {}))
-        )
-        builder.ml.metadata = metadata_ml
+        builder.ml = ml
 
         return builder
 
@@ -155,9 +156,9 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         qe_inputs.metadata.call_link_label = 'qe'
         qe_inputs = prepare_process_inputs(PwRelaxWorkChain, qe_inputs)
 
-        ml_inputs = AttributeDict(self.exposed_inputs(AseCalculation, 'ml'))
-        ml_inputs.structure = self.inputs.structure
-        ml_inputs.task = orm.Str('relax')
+        ml_inputs = AttributeDict(self.exposed_inputs(AseBaseWorkChain, 'ml'))
+        ml_inputs.ase.structure = self.inputs.structure
+        ml_inputs.ase.task = orm.Str('relax')
         ml_inputs.metadata.call_link_label = 'ml'
 
         if 'dry_run' in self.inputs and self.inputs.dry_run.value:
@@ -167,9 +168,9 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         self.report(f'launching PwRelaxWorkChain<{future.pk}> (QE engine)')
         self.to_context(workchain_qe=future)
 
-        future = self.submit(AseCalculation, **ml_inputs)
-        self.report(f'launching AseCalculation<{future.pk}> (ML engine)')
-        self.to_context(calc_ml=future)
+        future = self.submit(AseBaseWorkChain, **ml_inputs)
+        self.report(f'launching AseBaseWorkChain<{future.pk}> (ML engine)')
+        self.to_context(workchain_ml=future)
 
     def inspect_engines(self):
         """Verify that both engine relaxations finished successfully."""
@@ -179,8 +180,8 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
             self.report(f'PwRelaxWorkChain failed with exit status {self.ctx.workchain_qe.exit_status}')
             failed.append(self.exit_codes.ERROR_SUB_PROCESS_FAILED_QE)
 
-        if not self.ctx.calc_ml.is_finished_ok:
-            self.report(f'AseCalculation failed with exit status {self.ctx.calc_ml.exit_status}')
+        if not self.ctx.workchain_ml.is_finished_ok:
+            self.report(f'AseBaseWorkChain failed with exit status {self.ctx.workchain_ml.exit_status}')
             failed.append(self.exit_codes.ERROR_SUB_PROCESS_FAILED_ML)
 
         if len(failed) == 2:
@@ -192,7 +193,7 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         """Compare the relaxed structures and attach the outputs."""
         comparison = compare_relaxed_structures(
             self.ctx.workchain_qe.outputs.output_structure,
-            self.ctx.calc_ml.outputs.output_structure,
+            self.ctx.workchain_ml.outputs.output_structure,
             metadata={'call_link_label': 'compare_relaxed_structures'},
         )
 
@@ -202,7 +203,7 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         )
 
         self.out_many(self.exposed_outputs(self.ctx.workchain_qe, PwRelaxWorkChain, namespace='qe'))
-        self.out_many(self.exposed_outputs(self.ctx.calc_ml, AseCalculation, namespace='ml'))
+        self.out_many(self.exposed_outputs(self.ctx.workchain_ml, AseBaseWorkChain, namespace='ml'))
         self.out('comparison', comparison)
 
     def on_terminated(self):

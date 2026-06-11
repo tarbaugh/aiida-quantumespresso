@@ -1,21 +1,26 @@
 clean_workdir: false
 ml:
-  calculator:
-    args:
-    - GRACE-1L-OAM
-    callable: grace_fm
-    module: tensorpotential.calculator
-  code: test.quantumespresso.ase
-  metadata:
-    options:
-      resources:
-        num_machines: 1
-  parameters:
-    fmax: 0.01
-    hydrostatic_strain: false
-    optimizer: BFGS
-    relax_cell: true
-    steps: 200
+  ase:
+    calculator:
+      args:
+      - GRACE-1L-OAM
+      callable: grace_fm
+      module: tensorpotential.calculator
+    code: test.quantumespresso.ase
+    metadata:
+      options:
+        max_wallclock_seconds: 3600
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: false
+    parameters:
+      fmax: 0.01
+      hydrostatic_strain: false
+      optimizer: BFGS
+      relax_cell: true
+      steps: 200
+  max_iterations: 5
 qe:
   base_init_relax:
     kpoints_distance: 0.3

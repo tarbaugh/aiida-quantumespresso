@@ -1,15 +1,21 @@
 clean_workdir: false
 ml:
-  calculator:
-    args:
-    - GRACE-1L-OAM
-    callable: grace_fm
-    module: tensorpotential.calculator
-  code: test.quantumespresso.ase
-  metadata:
-    options:
-      resources:
-        num_machines: 1
+  ase:
+    calculator:
+      args:
+      - GRACE-1L-OAM
+      callable: grace_fm
+      module: tensorpotential.calculator
+    code: test.quantumespresso.ase
+    metadata:
+      options:
+        max_wallclock_seconds: 3600
+        resources:
+          num_machines: 1
+          num_mpiprocs_per_machine: 1
+        withmpi: false
+    parameters: {}
+  max_iterations: 5
 qe:
   kpoints_distance: 0.15
   kpoints_force_parity: false

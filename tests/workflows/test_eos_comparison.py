@@ -62,22 +62,28 @@ def test_scale_structure(generate_structure):
     assert len(scaled.sites) == len(structure.sites)
 
 
-def test_default(generate_workchain_eos_comparison, generate_calc_job, fixture_sandbox):
+def test_default(generate_workchain_eos_comparison):
     """Test the dry-run outline of the work chain: inputs of both engines are generated for every volume."""
+    from aiida.engine.utils import instantiate_process
+    from aiida.manage.manager import get_manager
+    from aiida.plugins import WorkflowFactory
+
     wkchain = generate_workchain_eos_comparison()
 
     dry_run_inputs = wkchain.run_engines()
     assert len(dry_run_inputs) == 5  # fast-style scale factor count of the fixture
 
     qe_inputs, ml_inputs = dry_run_inputs[0]
-    assert ml_inputs['task'].value == 'energy'
+    assert ml_inputs['ase']['task'].value == 'energy'
 
     volume_0 = qe_inputs['pw']['structure'].get_cell_volume()
     volume_reference = wkchain.inputs.structure.get_cell_volume()
     assert volume_0 == pytest.approx(volume_reference * 0.94)
-    assert ml_inputs['structure'].pk == qe_inputs['pw']['structure'].pk  # identical geometries for both engines
+    assert ml_inputs['ase']['structure'].pk == qe_inputs['pw']['structure'].pk  # identical geometries for both engines
 
-    generate_calc_job(fixture_sandbox, 'quantumespresso.ase', ml_inputs)
+    # validate the generated ML inputs against the `AseBaseWorkChain` spec
+    runner = get_manager().get_runner()
+    instantiate_process(runner, WorkflowFactory('quantumespresso.ase.base'), **ml_inputs)
 
 
 def test_invalid_scale_factors(generate_workchain_eos_comparison):

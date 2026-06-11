@@ -43,15 +43,15 @@ def test_default(get_relax_comparison_generator_inputs, data_regression, seriali
 
 
 def test_ml_parameters(get_relax_comparison_generator_inputs):
-    """Test that the ML relax parameters merge the protocol ``fmax`` over the calculation defaults."""
+    """Test that the ML relax parameters follow the ``AseBaseWorkChain`` protocol presets."""
     builder = RelaxComparisonWorkChain.get_builder_from_protocol(
         **get_relax_comparison_generator_inputs, protocol='stringent'
     )
-    parameters = builder.ml['parameters'].get_dict()
+    parameters = builder.ml['ase']['parameters'].get_dict()
 
-    assert parameters['fmax'] == 0.005
+    assert parameters['fmax'] == 0.001  # stringent preset of the `AseBaseWorkChain` protocol
     assert parameters['optimizer'] == 'BFGS'  # calculation default preserved
-    assert builder.ml['calculator'].get_dict() == GRACE
+    assert builder.ml['ase']['calculator'].get_dict() == GRACE
 
 
 def test_options(get_relax_comparison_generator_inputs):
@@ -62,5 +62,5 @@ def test_options(get_relax_comparison_generator_inputs):
         **get_relax_comparison_generator_inputs, options=options
     )
 
-    for subspace in (builder.qe['base_relax']['pw']['metadata'], builder.ml['metadata']):
+    for subspace in (builder.qe['base_relax']['pw']['metadata'], builder.ml['ase']['metadata']):
         assert subspace['options']['queue_name'] == queue_name, subspace

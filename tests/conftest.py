@@ -1183,10 +1183,12 @@ def generate_workchain_relax_comparison(generate_workchain, generate_inputs_pw, 
         qe = {'base_relax': {'pw': pw_inputs, 'kpoints': kpoints}}
 
         ml = {
-            'code': fixture_code('quantumespresso.ase'),
-            'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
-            'parameters': Dict({'fmax': 0.01}),
-            'metadata': {'options': get_default_options()},
+            'ase': {
+                'code': fixture_code('quantumespresso.ase'),
+                'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
+                'parameters': Dict({'fmax': 0.01}),
+                'metadata': {'options': get_default_options()},
+            }
         }
 
         inputs = {
@@ -1218,9 +1220,11 @@ def generate_workchain_eos_comparison(generate_workchain, generate_inputs_pw, fi
         qe = {'pw': pw_inputs, 'kpoints': kpoints}
 
         ml = {
-            'code': fixture_code('quantumespresso.ase'),
-            'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
-            'metadata': {'options': get_default_options()},
+            'ase': {
+                'code': fixture_code('quantumespresso.ase'),
+                'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
+                'metadata': {'options': get_default_options()},
+            }
         }
 
         inputs = {

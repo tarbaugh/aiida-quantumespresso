@@ -16,11 +16,9 @@ def instantiate_process_cls(process_cls, inputs):
 
 def test_default(
     generate_workchain_relax_comparison,
-    generate_calc_job,
     generate_calc_job_node,
     generate_structure,
     fixture_localhost,
-    fixture_sandbox,
 ):
     """Test instantiating the WorkChain, then mock its process by calling the methods in the ``spec.outline``."""
     wkchain = generate_workchain_relax_comparison()
@@ -28,8 +26,8 @@ def test_default(
     # run engines: the dry-run returns the generated inputs of both engines; validate them against their specs
     qe_inputs, ml_inputs = wkchain.run_engines()
 
-    assert ml_inputs['task'].value == 'relax'
-    assert ml_inputs['structure'].pk == wkchain.inputs.structure.pk
+    assert ml_inputs['ase']['task'].value == 'relax'
+    assert ml_inputs['ase']['structure'].pk == wkchain.inputs.structure.pk
 
     qe_workchain = instantiate_process_cls(plugins.WorkflowFactory('quantumespresso.pw.relax'), qe_inputs)
     qe_node = qe_workchain.node
@@ -37,7 +35,8 @@ def test_default(
     qe_node.set_process_state(engine.ProcessState.FINISHED)
     qe_node.store()
 
-    generate_calc_job(fixture_sandbox, 'quantumespresso.ase', ml_inputs)
+    # validate the generated ML inputs against the `AseBaseWorkChain` spec
+    instantiate_process_cls(plugins.WorkflowFactory('quantumespresso.ase.base'), ml_inputs)
 
     # mock the outputs: two slightly different relaxed Si structures
     qe_structure = generate_structure('silicon')
@@ -59,7 +58,7 @@ def test_default(
     parameters.store()
 
     wkchain.ctx.workchain_qe = qe_node
-    wkchain.ctx.calc_ml = ml_node
+    wkchain.ctx.workchain_ml = ml_node
 
     assert wkchain.inspect_engines() is None
 
@@ -90,7 +89,7 @@ def test_inspect_engines_failed(generate_workchain_relax_comparison, generate_ca
     ml_node.set_process_state(engine.ProcessState.FINISHED)
 
     wkchain.ctx.workchain_qe = qe_node
-    wkchain.ctx.calc_ml = ml_node
+    wkchain.ctx.workchain_ml = ml_node
 
     assert wkchain.inspect_engines() == wkchain.exit_codes.ERROR_SUB_PROCESS_FAILED_ML
 

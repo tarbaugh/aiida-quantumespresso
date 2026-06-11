@@ -1,22 +1,15 @@
+# The ML-engine presets (relax fmax etc.) live in the `AseBaseWorkChain` protocols (`ase/base.yaml`); overrides for
+# the ML engine can be passed under the `ml` key in the shape of the `AseBaseWorkChain` protocol inputs.
 default_inputs:
     clean_workdir: False
-    ml:
-        parameters:
-            fmax: 0.01  # eV/Å
 default_protocol: balanced
 protocols:
     balanced:
         description: 'Protocol to compare a QE and an ML relaxation at normal precision at moderate computational cost.'
     stringent:
         description: 'Protocol to compare a QE and an ML relaxation at high precision at higher computational cost.'
-        ml:
-            parameters:
-                fmax: 0.005
     fast:
         description: 'Protocol to compare a QE and an ML relaxation at low precision at minimal computational cost for testing purposes.'
-        ml:
-            parameters:
-                fmax: 0.05
 # List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
 meta_inputs_schema:
     qe:

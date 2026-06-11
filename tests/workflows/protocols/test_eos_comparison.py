@@ -61,5 +61,5 @@ def test_options(get_eos_comparison_generator_inputs):
     options = {'queue_name': queue_name, 'withmpi': False}
     builder = EosComparisonWorkChain.get_builder_from_protocol(**get_eos_comparison_generator_inputs, options=options)
 
-    for subspace in (builder.qe['pw']['metadata'], builder.ml['metadata']):
+    for subspace in (builder.qe['pw']['metadata'], builder.ml['ase']['metadata']):
         assert subspace['options']['queue_name'] == queue_name, subspace

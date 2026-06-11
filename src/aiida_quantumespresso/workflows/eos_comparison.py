@@ -5,7 +5,7 @@ computed at *identical geometries* with both engines:
 
 - Quantum ESPRESSO SCF, through the :class:`~aiida_quantumespresso.workflows.pw.base.PwBaseWorkChain`.
 - An arbitrary ASE calculator (e.g. a GRACE foundation model), through the
-  :class:`~aiida_quantumespresso.calculations.ase.AseCalculation` with ``task='energy'``.
+  :class:`~aiida_quantumespresso.workflows.ase.base.AseBaseWorkChain` with ``task='energy'``.
 
 A third-order Birch-Murnaghan equation of state is then fitted per engine, and the fits are compared through their
 reference-independent observables: the equilibrium volume V0, the bulk modulus B0 and its pressure derivative B0'.
@@ -29,7 +29,7 @@ from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 from .protocols.utils import ProtocolMixin
 
 PwBaseWorkChain = plugins.WorkflowFactory('quantumespresso.pw.base')
-AseCalculation = plugins.CalculationFactory('quantumespresso.ase')
+AseBaseWorkChain = plugins.WorkflowFactory('quantumespresso.ase.base')
 
 
 def validate_scale_factors(value, _):
@@ -97,10 +97,10 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
             },
         )
         spec.expose_inputs(
-            AseCalculation,
+            AseBaseWorkChain,
             namespace='ml',
-            exclude=('structure', 'task'),
-            namespace_options={'help': "Inputs for the ASE engine (the task is fixed to 'energy')."},
+            exclude=('clean_workdir', 'ase.structure', 'ase.task'),
+            namespace_options={'help': "Inputs for the ASE engine `AseBaseWorkChain` (the task is fixed to 'energy')."},
         )
 
         spec.outline(
@@ -151,7 +151,6 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
         :return: a process builder instance with all inputs defined ready for launch.
         """
         from aiida_quantumespresso.utils.ase import as_structure_data
-        from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
 
         inputs = cls.get_protocol_inputs(protocol, overrides)
         structure = as_structure_data(structure)
@@ -162,28 +161,32 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
         qe['pw'].pop('structure', None)
         qe.pop('clean_workdir', None)
 
-        metadata_ml = inputs.get('ml', {}).get('metadata', {'options': {}})
-
-        if options:
-            metadata_ml['options'] = recursive_merge(metadata_ml['options'], options)
-
-        metadata_ml['options'] = cls.set_default_resources(metadata_ml['options'], ase_code.computer.scheduler_type)
+        ml = AseBaseWorkChain.get_builder_from_protocol(
+            ase_code,
+            structure,
+            calculator,
+            task='energy',
+            protocol=protocol,
+            overrides=inputs.get('ml', None),
+            options=options,
+        )
+        ml['ase'].pop('structure', None)
+        ml['ase'].pop('task', None)
+        ml.pop('clean_workdir', None)
 
         builder = cls.get_builder()
         builder.structure = structure
         builder.clean_workdir = orm.Bool(inputs['clean_workdir'])
         builder.scale_factors = orm.List(inputs['scale_factors'])
         builder.qe = qe
-        builder.ml.code = ase_code
-        builder.ml.calculator = calculator  # the port serializer wraps plain strings and dictionaries
-        builder.ml.metadata = metadata_ml
+        builder.ml = ml
 
         return builder
 
     def run_engines(self):
         """Run the energy evaluations of both engines at every scaled volume."""
         qe_inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, 'qe'))
-        ml_inputs = AttributeDict(self.exposed_inputs(AseCalculation, 'ml'))
+        ml_inputs = AttributeDict(self.exposed_inputs(AseBaseWorkChain, 'ml'))
 
         dry_run_inputs = []
 
@@ -198,18 +201,20 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
             qe_inputs.metadata.call_link_label = f'qe_{index}'
             prepared = prepare_process_inputs(PwBaseWorkChain, qe_inputs)
 
-            ml_inputs.structure = structure
-            ml_inputs.task = orm.Str('energy')
+            ml_inputs.ase.structure = structure
+            ml_inputs.ase.task = orm.Str('energy')
             ml_inputs.metadata.call_link_label = f'ml_{index}'
 
             if 'dry_run' in self.inputs and self.inputs.dry_run.value:
-                dry_run_inputs.append((prepared, dict(ml_inputs)))
+                # Snapshot the nested namespaces: `ml_inputs` is mutated on every iteration of the loop.
+                captured = {key: dict(value) if isinstance(value, dict) else value for key, value in ml_inputs.items()}
+                dry_run_inputs.append((prepared, captured))
                 continue
 
             future = self.submit(PwBaseWorkChain, **prepared)
             self.to_context(**{f'qe_{index}': future})
 
-            future = self.submit(AseCalculation, **ml_inputs)
+            future = self.submit(AseBaseWorkChain, **ml_inputs)
             self.to_context(**{f'ml_{index}': future})
 
         if dry_run_inputs:
