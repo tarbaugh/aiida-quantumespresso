@@ -1,0 +1,36 @@
+# The engine presets live in the protocols of the sub work chains (`relax_comparison`, `eos_comparison`,
+# `phonon_comparison` and, for the ML engine, `ase/base.yaml`); overrides are passed through under the `relax`,
+# `eos` and `phonons` keys.
+default_inputs:
+    clean_workdir: False
+    run_eos: True
+    run_phonons: True
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to benchmark an ML calculator against QE at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to benchmark an ML calculator against QE at high precision at higher computational cost.'
+    fast:
+        description: 'Protocol to benchmark an ML calculator against QE at low precision at minimal computational cost for testing purposes.'
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema:
+    relax:
+        qe:
+            meta_parameters:
+                conv_thr_per_atom:
+                etot_conv_thr_per_atom:
+            pseudo_family:
+    eos:
+        qe:
+            meta_parameters:
+                conv_thr_per_atom:
+                etot_conv_thr_per_atom:
+            pseudo_family:
+    phonons:
+        qe:
+            scf:
+                meta_parameters:
+                    conv_thr_per_atom:
+                    etot_conv_thr_per_atom:
+                pseudo_family:

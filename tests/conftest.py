@@ -1226,6 +1226,88 @@ def generate_workchain_phonon_comparison(generate_workchain, generate_inputs_pw,
 
 
 @pytest.fixture
+def generate_workchain_ml_benchmark(generate_workchain, generate_inputs_pw, generate_kpoints_mesh, fixture_code):
+    """Generate an instance of a `MlBenchmarkWorkChain`."""
+
+    def _generate_workchain_ml_benchmark(run_eos=True, run_phonons=True):
+        from aiida.orm import Bool, Dict
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.ml_benchmark'
+
+        def ml_namespace():
+            return {
+                'ase': {
+                    'code': fixture_code('quantumespresso.ase'),
+                    'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
+                    'metadata': {'options': get_default_options()},
+                }
+            }
+
+        def pw_namespace(calculation=None):
+            pw_inputs = generate_inputs_pw()
+            kpoints = pw_inputs.pop('kpoints')
+            structure = pw_inputs.pop('structure')
+            if calculation is not None:
+                pw_inputs['parameters']['CONTROL']['calculation'] = calculation
+                pw_inputs['parameters']['CELL'] = {'press_conv_thr': 0.5}
+            return {'pw': pw_inputs, 'kpoints': kpoints}, structure
+
+        relax_qe, structure = pw_namespace(calculation='vc-relax')
+        relax = {'qe': {'base_relax': relax_qe}, 'ml': ml_namespace()}
+
+        eos_qe, _ = pw_namespace()
+        eos = {'qe': eos_qe, 'ml': ml_namespace()}
+
+        phonons_qe, _ = pw_namespace()
+        phonons = {
+            'qe': {
+                'scf': phonons_qe,
+                'ph': {
+                    'ph': {
+                        'code': fixture_code('quantumespresso.ph'),
+                        'parameters': Dict({'INPUTPH': {'tr2_ph': 1.0e-16}}),
+                        'metadata': {'options': get_default_options()},
+                    },
+                    'qpoints': generate_kpoints_mesh(2),
+                },
+                'q2r': {
+                    'q2r': {
+                        'code': fixture_code('quantumespresso.q2r'),
+                        'parameters': Dict({'INPUT': {'zasr': 'crystal'}}),
+                        'metadata': {'options': get_default_options()},
+                    }
+                },
+                'matdyn': {
+                    'matdyn': {
+                        'code': fixture_code('quantumespresso.matdyn'),
+                        'parameters': Dict({'INPUT': {'asr': 'crystal'}}),
+                        'metadata': {'options': get_default_options()},
+                    }
+                },
+            },
+            'ml': ml_namespace(),
+        }
+
+        inputs = {
+            'structure': structure,
+            'run_eos': Bool(run_eos),
+            'run_phonons': Bool(run_phonons),
+            'relax': relax,
+            'dry_run': Bool(True),
+        }
+        if run_eos:
+            inputs['eos'] = eos
+        if run_phonons:
+            inputs['phonons'] = phonons
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_ml_benchmark
+
+
+@pytest.fixture
 def generate_workchain_relax_comparison(generate_workchain, generate_inputs_pw, fixture_code):
     """Generate an instance of a `RelaxComparisonWorkChain`."""
 

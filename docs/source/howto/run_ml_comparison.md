@@ -32,6 +32,7 @@ node = submit(builder)
 | Relax comparison     | {class}`~aiida_quantumespresso.workflows.relax_comparison.RelaxComparisonWorkChain` (``quantumespresso.relax_comparison``) |
 | EOS comparison       | {class}`~aiida_quantumespresso.workflows.eos_comparison.EosComparisonWorkChain` (``quantumespresso.eos_comparison``) |
 | Phonon comparison    | {class}`~aiida_quantumespresso.workflows.phonon_comparison.PhononComparisonWorkChain` (``quantumespresso.phonon_comparison``) |
+| Full benchmark       | {class}`~aiida_quantumespresso.workflows.ml_benchmark.MlBenchmarkWorkChain` (``quantumespresso.ml_benchmark``) |
 
 ---
 
@@ -162,3 +163,29 @@ evaluated along the **identical explicit q-point path**, so the `comparison` out
 the root-mean-square and maximum deviation over the full dispersion, the mode-resolved Γ-point frequencies, and
 imaginary-mode flags. For silicon, GRACE-1L-OAM reproduces the DFPT dispersion of this plugin to an rms deviation
 of well below 1 THz, with the Γ-point optical mode ~10% soft (13.9 vs 15.4 THz).
+
+## The full benchmark in one submission
+
+The `MlBenchmarkWorkChain` chains all three comparisons: it relaxes the input structure with both engines first,
+then compares the equation of state and the phonon dispersion **at the Quantum ESPRESSO relaxed geometry** (in
+parallel) — the methodologically meaningful choice, since the EOS is sampled around its minimum and the phonons are
+free of spurious imaginary modes from residual forces. The headline metrics land in a single `summary` output:
+
+```python
+builder = WorkflowFactory('quantumespresso.ml_benchmark').get_builder_from_protocol(
+    pw_code=orm.load_code('pw@localhost'),
+    ph_code=orm.load_code('ph@localhost'),
+    q2r_code=orm.load_code('q2r@localhost'),
+    matdyn_code=orm.load_code('matdyn@localhost'),
+    ase_code=orm.load_code('ase-python@localhost'),
+    structure=bulk('Si', 'diamond', 5.43),
+    calculator='grace',
+    protocol='fast',
+)
+node = submit(builder)
+# node.outputs.summary -> {'relax': {'delta_volume_percent': ...}, 'eos': {'delta_b0_percent': ...},
+#                          'phonons': {'delta_gamma_optical_percent': ..., 'rms_difference': ...}}
+```
+
+The `run_eos` and `run_phonons` switches disable individual comparisons, and the full outputs of every comparison
+remain available under the `relax`, `eos` and `phonons` output namespaces.
