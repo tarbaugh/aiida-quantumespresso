@@ -3,7 +3,7 @@ import importlib
 import json
 import traceback
 
-CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {"displacement": 0.05, "path_npoints": 31, "supercell": [2, 2, 2]}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "phonons"}""")
+CONFIG = json.loads("""{"calculator": {"callable": "EMT", "module": "ase.calculators.emt"}, "output_structure_filename": "output_structure.xyz", "parameters": {"displacement": 0.05, "path_npoints": 31, "qpoints": null, "supercell": [2, 2, 2]}, "results_filename": "results.json", "structure_filename": "structure.xyz", "task": "phonons"}""")
 
 results = {'task': CONFIG['task'], 'calculator': CONFIG['calculator']}
 
@@ -46,14 +46,22 @@ try:
         phonons.read(acoustic=True)
         phonons.clean()
 
-        path = atoms.cell.bandpath(npoints=parameters['path_npoints'])
-        band_structure = phonons.get_band_structure(path)
-
         EV_TO_THZ = 241.79893
-        results['phonon_qpoints'] = path.kpts.tolist()
-        results['phonon_path'] = path.path
-        results['phonon_special_points'] = {name: kpt.tolist() for name, kpt in path.special_points.items()}
-        results['phonon_frequencies'] = (band_structure.energies[0] * EV_TO_THZ).tolist()
+        if parameters.get('qpoints') is not None:
+            import numpy as np
+
+            qpoints = np.array(parameters['qpoints'], dtype=float)
+            results['phonon_qpoints'] = qpoints.tolist()
+            results['phonon_path'] = None
+            results['phonon_special_points'] = {}
+            results['phonon_frequencies'] = (phonons.band_structure(qpoints) * EV_TO_THZ).tolist()
+        else:
+            path = atoms.cell.bandpath(npoints=parameters['path_npoints'])
+            band_structure = phonons.get_band_structure(path)
+            results['phonon_qpoints'] = path.kpts.tolist()
+            results['phonon_path'] = path.path
+            results['phonon_special_points'] = {name: kpt.tolist() for name, kpt in path.special_points.items()}
+            results['phonon_frequencies'] = (band_structure.energies[0] * EV_TO_THZ).tolist()
 
     results['energy'] = float(atoms.get_potential_energy())
     results['forces'] = atoms.get_forces().tolist()

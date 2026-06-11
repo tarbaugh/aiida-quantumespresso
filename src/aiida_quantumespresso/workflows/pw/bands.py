@@ -200,10 +200,9 @@ class PwBandsWorkChain(ProtocolMixin, WorkChain):
 
         This is only called if the `bands_kpoints` input was not specified.
         """
-        inputs = {
-            'reference_distance': self.inputs.get('bands_kpoints_distance', None),
-            'metadata': {'call_link_label': 'seekpath'},
-        }
+        inputs = {'metadata': {'call_link_label': 'seekpath'}}
+        if 'bands_kpoints_distance' in self.inputs:
+            inputs['reference_distance'] = self.inputs.bands_kpoints_distance
         result = seekpath_structure_analysis(self.ctx.current_structure, **inputs)
         self.ctx.current_structure = result['primitive_structure']
         self.ctx.bands_kpoints = result['explicit_kpoints']

@@ -2,37 +2,61 @@
 
 # Compare ML potentials against Quantum ESPRESSO
 
-The plugin can run any [ASE](https://wiki.fysik.dtu.dk/ase/) calculator — in particular machine-learning interatomic potentials such as the [GRACE](https://gracemaker.readthedocs.io) foundation models — through the same AiiDA provenance machinery as Quantum ESPRESSO, enabling head-to-head ML-vs-DFT comparisons at identical geometries.
+The plugin can run any [ASE](https://wiki.fysik.dtu.dk/ase/) calculator — in particular machine-learning interatomic
+potentials such as the [GRACE](https://gracemaker.readthedocs.io) foundation models — through the same AiiDA
+provenance machinery as Quantum ESPRESSO, enabling head-to-head ML-vs-DFT comparisons at identical geometries.
+
+## Quickstart
+
+All inputs are plain Python: structures are `ase.Atoms`, calculators are shorthand strings, tasks are strings.
+
+```python
+from aiida import load_profile, orm
+from aiida.engine import submit
+from aiida.plugins import WorkflowFactory
+from ase.build import bulk
+
+load_profile()
+
+# A single ML calculation (energy, relax or phonons), with error handling and restarts:
+builder = WorkflowFactory('quantumespresso.ase.base').get_builder_from_protocol(
+    'ase-python@localhost', bulk('Si', 'diamond', 5.43), 'grace', task='relax'
+)
+node = submit(builder)
+```
 
 |                      |                                                                                  |
 |----------------------|----------------------------------------------------------------------------------|
+| Run an ML calculation | {class}`~aiida_quantumespresso.workflows.ase.base.AseBaseWorkChain` (``quantumespresso.ase.base``) |
 | Engine calculation   | {class}`~aiida_quantumespresso.calculations.ase.AseCalculation` (``quantumespresso.ase``) |
 | Relax comparison     | {class}`~aiida_quantumespresso.workflows.relax_comparison.RelaxComparisonWorkChain` (``quantumespresso.relax_comparison``) |
 | EOS comparison       | {class}`~aiida_quantumespresso.workflows.eos_comparison.EosComparisonWorkChain` (``quantumespresso.eos_comparison``) |
+| Phonon comparison    | {class}`~aiida_quantumespresso.workflows.phonon_comparison.PhononComparisonWorkChain` (``quantumespresso.phonon_comparison``) |
 
 ---
 
 ## Engine compatibility matrix
 
 Machine-learning potentials provide energies, forces and stresses, but **no electronic-structure information**.
-Workflows therefore split into those where the ML engine can stand in for `pw.x`, and those that are inherently DFT-only:
+Workflows therefore split into those where the ML engine can stand in for `pw.x`, and those that are inherently
+DFT-only:
 
 | Workflow / property                  | ML engine | Reason                                                            |
 |--------------------------------------|:---------:|-------------------------------------------------------------------|
-| Single-point energy/forces/stress    | ✓         | `AseCalculation`, task `energy`                                    |
-| Geometry/cell relaxation             | ✓         | `AseCalculation`, task `relax`; head-to-head via `RelaxComparisonWorkChain` |
+| Single-point energy/forces/stress    | ✓         | `AseBaseWorkChain`, task `energy`                                  |
+| Geometry/cell relaxation             | ✓         | `AseBaseWorkChain`, task `relax`; head-to-head via `RelaxComparisonWorkChain` |
 | Equation of state (V₀, B₀, B₀′)      | ✓         | `EosComparisonWorkChain` — reference-independent observables       |
-| Phonons (finite displacements)       | ✓         | `AseCalculation`, task `phonons` (`ase.phonons` supercell method)   |
+| Phonon dispersion                    | ✓         | `AseBaseWorkChain`, task `phonons`; head-to-head against DFPT via `PhononComparisonWorkChain` |
 | Band structure (`PwBandsWorkChain`)  | ✗         | requires Kohn-Sham eigenvalues                                     |
 | (P)DOS (`PdosWorkChain`)             | ✗         | requires eigenvalues/wavefunctions                                 |
 | Dielectric function (`EpsilonWorkChain`) | ✗     | requires wavefunctions and interband matrix elements               |
 | Conductivity (`ConductivityWorkChain`) | ✗       | BoltzTraP2 interpolates the electronic band structure              |
-| DFPT phonons (`PhononBandsWorkChain`) | ✗        | ph.x is a DFPT response calculation on the Kohn-Sham ground state  |
 
 :::{important}
 **Never compare total energies across engines.** A pseudopotential DFT code and an ML potential have different
 energy references; all comparison work chains restrict themselves to reference-independent observables (geometry,
-volume, bulk modulus, energy *differences* within one engine) and report absolute energies per engine only.
+volume, bulk modulus, phonon frequencies, energy *differences* within one engine) and report absolute energies per
+engine only.
 :::
 
 ---
@@ -67,18 +91,17 @@ calculator = {'module': 'tensorpotential.calculator', 'callable': 'grace_fm', 'a
 
 GRACE and MACE foundation models download automatically on first use.
 
+The {class}`~aiida_quantumespresso.workflows.ase.base.AseBaseWorkChain` wraps the engine in the same
+``BaseRestartWorkChain`` machinery as every Quantum ESPRESSO code: an unconverged geometry optimization restarts
+from its last structure, while a calculator exception (missing package, unknown model) aborts immediately as
+unrecoverable. The ``fast``/``balanced``/``stringent`` protocols set the optimizer threshold (fmax 0.05/0.01/0.001
+eV/Å) and the phonon supercell (2³/3³/4³).
+
 ---
 
 ## Head-to-head relaxation
 
 ```python
-from aiida import orm, load_profile
-from aiida.engine import submit
-from aiida.plugins import WorkflowFactory
-from ase.build import bulk
-
-load_profile()
-
 builder = WorkflowFactory('quantumespresso.relax_comparison').get_builder_from_protocol(
     pw_code=orm.load_code('pw@localhost'),
     ase_code=orm.load_code('ase-python@localhost'),
@@ -116,23 +139,26 @@ The pressure derivative B₀′ is the third derivative of E(V) and is very sens
 candidate-engine value as a reported deviation metric rather than a convergence criterion.
 :::
 
-## ML phonon dispersion
-
-The `phonons` task of the `AseCalculation` computes the finite-displacement phonon dispersion along the automatic
-high-symmetry q-point path (`ase.phonons` supercell method, acoustic sum rule imposed), returning a `BandsData` in
-THz that can be compared directly against the DFPT result of the `PhononBandsWorkChain`:
+## Head-to-head phonon dispersion
 
 ```python
-from aiida.plugins import CalculationFactory
-
-builder = CalculationFactory('quantumespresso.ase').get_builder()
-builder.code = orm.load_code('ase-python@localhost')
-builder.structure = bulk('Si', 'diamond', 5.43)
-builder.calculator = 'grace'
-builder.task = 'phonons'
-builder.parameters = {'supercell': [2, 2, 2]}
+builder = WorkflowFactory('quantumespresso.phonon_comparison').get_builder_from_protocol(
+    pw_code=orm.load_code('pw@localhost'),
+    ph_code=orm.load_code('ph@localhost'),
+    q2r_code=orm.load_code('q2r@localhost'),
+    matdyn_code=orm.load_code('matdyn@localhost'),
+    ase_code=orm.load_code('ase-python@localhost'),
+    structure=bulk('Si', 'diamond', 5.43),
+    calculator='grace',
+    protocol='fast',
+)
+node = submit(builder)
 ```
 
-For silicon, GRACE-1L-OAM reproduces the Γ-point optical mode of the DFPT chain on this plugin (15.4 THz) to within
-a few percent.
-:::
+The input structure is normalized to its primitive cell with SeeK-path, and the phonon dispersion of that *same*
+cell is computed twice: with density-functional perturbation theory (`PhononBandsWorkChain`: scf → ph.x → q2r.x →
+matdyn.x) and with finite displacements of the ML potential (`ase.phonons` supercell method). Both dispersions are
+evaluated along the **identical explicit q-point path**, so the `comparison` output contains point-by-point metrics:
+the root-mean-square and maximum deviation over the full dispersion, the mode-resolved Γ-point frequencies, and
+imaginary-mode flags. For silicon, GRACE-1L-OAM reproduces the DFPT dispersion of this plugin to an rms deviation
+of well below 1 THz, with the Γ-point optical mode ~10% soft (13.9 vs 15.4 THz).

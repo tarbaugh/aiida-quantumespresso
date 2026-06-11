@@ -1,0 +1,31 @@
+
+     Program MATDYN v.7.5 starts on 10Jun2026 at 23: 9:49 
+
+     This program is part of the open-source Quantum ESPRESSO suite
+     for quantum simulation of materials; please cite
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 21 395502 (2009);
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 29 465901 (2017);
+         "P. Giannozzi et al., J. Chem. Phys. 152 154105 (2020);
+          URL http://www.quantum-espresso.org", 
+     in publications or presentations arising from this work. More details at
+     http://www.quantum-espresso.org/quote
+
+     Parallel version (MPI), running on     1 processors
+
+     MPI processes distributed on     1 nodes
+     0 MiB available memory on the printing compute node when the environment starts
+
+ mass for atomic type   1 not given; uses mass from file 3c1d3ec808db7a53e88b74f930ff8a3d5db99943ac3b95a23260e1e4b8554c                                                                                                                                                                                                  
+ Norm of the difference between old and new effective charges:    0.00000000000000000000
+
+ Norm of the difference between old and new force-constants:   0.00001231488123462600
+
+
+     MATDYN       :      0.03s CPU      0.03s WALL
+
+
+   This run was terminated on:  23: 9:49  10Jun2026            
+
+=------------------------------------------------------------------------------=
+   JOB DONE.
+=------------------------------------------------------------------------------=

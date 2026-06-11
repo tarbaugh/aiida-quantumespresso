@@ -1165,6 +1165,67 @@ def generate_workchain_phonon_bands(generate_workchain, generate_inputs_pw, gene
 
 
 @pytest.fixture
+def generate_workchain_phonon_comparison(generate_workchain, generate_inputs_pw, generate_kpoints_mesh, fixture_code):
+    """Generate an instance of a `PhononComparisonWorkChain`."""
+
+    def _generate_workchain_phonon_comparison():
+        from aiida.orm import Bool, Dict
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.phonon_comparison'
+
+        scf_pw_inputs = generate_inputs_pw()
+        kpoints = scf_pw_inputs.pop('kpoints')
+        structure = scf_pw_inputs.pop('structure')
+
+        qe = {
+            'scf': {'pw': scf_pw_inputs, 'kpoints': kpoints},
+            'ph': {
+                'ph': {
+                    'code': fixture_code('quantumespresso.ph'),
+                    'parameters': Dict({'INPUTPH': {'tr2_ph': 1.0e-16}}),
+                    'metadata': {'options': get_default_options()},
+                },
+                'qpoints': generate_kpoints_mesh(2),
+            },
+            'q2r': {
+                'q2r': {
+                    'code': fixture_code('quantumespresso.q2r'),
+                    'parameters': Dict({'INPUT': {'zasr': 'crystal'}}),
+                    'metadata': {'options': get_default_options()},
+                }
+            },
+            'matdyn': {
+                'matdyn': {
+                    'code': fixture_code('quantumespresso.matdyn'),
+                    'parameters': Dict({'INPUT': {'asr': 'crystal'}}),
+                    'metadata': {'options': get_default_options()},
+                }
+            },
+        }
+
+        ml = {
+            'ase': {
+                'code': fixture_code('quantumespresso.ase'),
+                'calculator': Dict({'module': 'ase.calculators.emt', 'callable': 'EMT'}),
+                'metadata': {'options': get_default_options()},
+            }
+        }
+
+        inputs = {
+            'structure': structure,
+            'qe': qe,
+            'ml': ml,
+            'dry_run': Bool(True),
+        }
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_phonon_comparison
+
+
+@pytest.fixture
 def generate_workchain_relax_comparison(generate_workchain, generate_inputs_pw, fixture_code):
     """Generate an instance of a `RelaxComparisonWorkChain`."""
 

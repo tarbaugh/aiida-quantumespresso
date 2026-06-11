@@ -10,6 +10,7 @@ ase:
   parameters:
     displacement: 0.05
     path_npoints: 31
+    qpoints: null
     supercell:
     - 2
     - 2

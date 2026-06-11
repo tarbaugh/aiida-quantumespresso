@@ -104,7 +104,7 @@ def parse_raw_matdyn_phonon_file(phonon_frequencies):
     parsed_data = {}
     parsed_data['warnings'] = []
 
-    # extract numbere of bands and kpoints
+    # extract number of bands and kpoints
     try:
         num_bands = int(phonon_frequencies.split('=')[1].split(',')[0])
         num_kpoints = int(phonon_frequencies.split('=')[2].split('/')[0])
@@ -113,43 +113,45 @@ def parse_raw_matdyn_phonon_file(phonon_frequencies):
         parsed_data['warnings'].append('Number of bands or kpoints unreadable in phonon frequencies file')
         return parsed_data
 
-    # initialize array of frequencies
+    def parse_frequency_line(line):
+        """Split a frequency line into floats, correcting fused values like ``-1204.1234-1020.536``."""
+        values = []
+        for token in line.split():
+            try:
+                values.append(float(token))
+            except ValueError:
+                # case in which there are two frequencies attached like -1204.1234-1020.536
+                if '-' in token:
+                    parts = [part for part in re.split('(-)', token) if part != '']
+                    for index in range(0, len(parts), 2):  # parts should have an even number of elements
+                        values.append(float(parts[index] + parts[index + 1]))
+                else:
+                    raise
+        return values
+
+    # The file is line-structured: after the `&plot ... /` header, every q-point is written as one coordinate line
+    # followed by as many lines as needed to list `num_bands` frequencies. The coordinate line is skipped wholesale:
+    # depending on the Quantum ESPRESSO version it holds three columns (q) or four (q and its weight, since v7.0),
+    # so consuming a fixed number of values from a flattened stream would shift the frequencies.
+    lines = phonon_frequencies.splitlines()
+    body = iter(lines[next(index for index, line in enumerate(lines) if '/' in line) + 1 :])
+
     freq_matrix = np.zeros((num_kpoints, num_bands))
 
-    split_data = phonon_frequencies.split()
-    # discard the header of the file
-    raw_data = split_data[split_data.index('/') + 1 :]
+    try:
+        for i in range(num_kpoints):
+            next(body)  # skip the q-point coordinate line
+            frequencies = []
+            while len(frequencies) < num_bands:
+                frequencies.extend(parse_frequency_line(next(body)))
+            freq_matrix[i] = frequencies[:num_bands]
+    except ValueError:
+        parsed_data['warnings'].append('Bad formatting of frequencies')
+        return parsed_data
+    except StopIteration:
+        parsed_data['warnings'].append('Error while parsing the frequencies, dimension exceeded')
+        return parsed_data
 
-    # try to improve matdyn deficiencies
-    corrected_data = []
-    for b in raw_data:
-        try:
-            corrected_data.append(float(b))
-        except ValueError:
-            # case in which there are two frequencies attached like -1204.1234-1020.536
-            if '-' in b:
-                c = re.split('(-)', b)
-                d = [i for i in c if i != '']
-                for i in range(0, len(d), 2):  # d should have an even number of elements
-                    corrected_data.append(float(d[i] + d[i + 1]))
-            else:
-                # I don't know what to do
-                parsed_data['warnings'].append('Bad formatting of frequencies')
-                return parsed_data
-
-    counter = 3
-    for i in range(num_kpoints):
-        for j in range(num_bands):
-            try:
-                freq_matrix[i, j] = corrected_data[counter] * CONSTANTS.invcm_to_THz  # from cm-1 to THz
-            except ValueError:
-                parsed_data['warnings'].append('Error while parsing the frequencies')
-            except IndexError:
-                parsed_data['warnings'].append('Error while parsing the frequencies, dimension exceeded')
-                return parsed_data
-            counter += 1
-        counter += 3  # move past the kpoint coordinates
-
-    parsed_data['phonon_bands'] = freq_matrix
+    parsed_data['phonon_bands'] = freq_matrix * CONSTANTS.invcm_to_THz  # from cm-1 to THz
 
     return parsed_data

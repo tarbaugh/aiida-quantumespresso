@@ -83,6 +83,18 @@ def test_ase_phonons_parameters(fixture_sandbox, generate_calc_job, generate_inp
     assert '"fmax"' not in script  # relax-task key not forwarded to the phonons task
 
 
+def test_ase_phonons_explicit_qpoints(fixture_sandbox, generate_calc_job, generate_inputs):
+    """Test that explicit q-points are forwarded to the phonons task, replacing the automatic band path."""
+    qpoints = [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]]
+    inputs = generate_inputs(task='phonons', parameters={'qpoints': qpoints})
+    generate_calc_job(fixture_sandbox, 'quantumespresso.ase', inputs)
+
+    with fixture_sandbox.open('aiida_ase_script.py') as handle:
+        script = handle.read()
+
+    assert '"qpoints": [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]]' in script
+
+
 @pytest.mark.parametrize(
     ('key', 'value', 'match'),
     [

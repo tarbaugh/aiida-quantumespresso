@@ -86,14 +86,22 @@ try:
         phonons.read(acoustic=True)
         phonons.clean()
 
-        path = atoms.cell.bandpath(npoints=parameters['path_npoints'])
-        band_structure = phonons.get_band_structure(path)
-
         EV_TO_THZ = 241.79893
-        results['phonon_qpoints'] = path.kpts.tolist()
-        results['phonon_path'] = path.path
-        results['phonon_special_points'] = {name: kpt.tolist() for name, kpt in path.special_points.items()}
-        results['phonon_frequencies'] = (band_structure.energies[0] * EV_TO_THZ).tolist()
+        if parameters.get('qpoints') is not None:
+            import numpy as np
+
+            qpoints = np.array(parameters['qpoints'], dtype=float)
+            results['phonon_qpoints'] = qpoints.tolist()
+            results['phonon_path'] = None
+            results['phonon_special_points'] = {}
+            results['phonon_frequencies'] = (phonons.band_structure(qpoints) * EV_TO_THZ).tolist()
+        else:
+            path = atoms.cell.bandpath(npoints=parameters['path_npoints'])
+            band_structure = phonons.get_band_structure(path)
+            results['phonon_qpoints'] = path.kpts.tolist()
+            results['phonon_path'] = path.path
+            results['phonon_special_points'] = {name: kpt.tolist() for name, kpt in path.special_points.items()}
+            results['phonon_frequencies'] = (band_structure.energies[0] * EV_TO_THZ).tolist()
 
     results['energy'] = float(atoms.get_potential_energy())
     results['forces'] = atoms.get_forces().tolist()
@@ -168,6 +176,7 @@ class AseCalculation(CalcJob):
         'supercell': [2, 2, 2],  # supercell repetitions for the finite displacements
         'displacement': 0.05,  # Å, finite-displacement amplitude
         'path_npoints': 31,  # number of q-points along the automatic high-symmetry band path
+        'qpoints': None,  # explicit q-points (crystal coordinates); replaces the automatic band path if given
     }
 
     @classmethod

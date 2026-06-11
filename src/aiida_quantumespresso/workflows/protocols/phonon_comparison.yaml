@@ -1,0 +1,21 @@
+# The QE engine presets live in the `PhononBandsWorkChain` protocols and the ML engine presets in the
+# `AseBaseWorkChain` protocols (`ase/base.yaml`); overrides are passed through under the `qe` and `ml` keys.
+default_inputs:
+    clean_workdir: False
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to compare the QE DFPT and ML phonon dispersions at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to compare the QE DFPT and ML phonon dispersions at high precision at higher computational cost.'
+    fast:
+        description: 'Protocol to compare the QE DFPT and ML phonon dispersions at low precision at minimal computational cost for testing purposes.'
+        bands_kpoints_distance: 0.1
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides
+meta_inputs_schema:
+    qe:
+        scf:
+            meta_parameters:
+                conv_thr_per_atom:
+                etot_conv_thr_per_atom:
+            pseudo_family:
