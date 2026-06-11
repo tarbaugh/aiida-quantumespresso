@@ -19,6 +19,7 @@ hubbard
 conductivity
 epsilon
 phonon_bands
+ml_comparison
 ```
 
 :::{card}
@@ -137,6 +138,25 @@ Learn how to compute the phonon dispersion of a material with density-functional
 :class: footer-table
 :widths: 50 50
 * - {fa}`fa-sharp fa-regular fa-clock` 40 min
+  - {{ aiida_logo }} [Intermediate]{.aiida-orange}
+::::
+:::
+
+:::{card}
+:class-header: panel-header-text
+:class-footer: tutor-footer
+:link: tutorials-ml-comparison
+:link-type: ref
+:margin: 4
+
+{fa}`fa-solid fa-robot` Machine-learning potentials vs QE
+^^^
+Run machine-learning interatomic potentials (e.g. the GRACE foundation models) through the same AiiDA machinery as Quantum ESPRESSO, and compare the two engines head-to-head on relaxed geometries, equations of state and phonon dispersions.
++++
+::::{list-table}
+:class: footer-table
+:widths: 50 50
+* - {fa}`fa-sharp fa-regular fa-clock` 30 min
   - {{ aiida_logo }} [Intermediate]{.aiida-orange}
 ::::
 :::
