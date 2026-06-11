@@ -13,12 +13,18 @@ number of electrons from the ``data-file-schema.xml`` file written by ``pw.x`` i
 that single XML file is required (no wavefunction or charge-density files), so the parent NSCF calculation must have
 been run with crystal symmetry enabled (``nosym = .false.``) on a uniform k-point mesh, since BoltzTraP2 reconstructs
 the full Brillouin zone from the irreducible set using the symmetry operations.
+
+The interpolation is by far the more expensive of the two steps and depends only on the DFT input and the
+``interpolate`` parameters. To sweep the ``integrate`` settings (e.g. other temperatures) without recomputing it, pass
+the ``remote_folder`` of a completed ``BoltztrapCalculation`` as the ``parent_folder``: its ``interpolation.bt2`` file
+is then reused and only ``btp2 integrate`` is run.
 """
 
 import pathlib
 
 from aiida import orm
 from aiida.common import datastructures, exceptions
+from aiida.orm.nodes.data.base import to_aiida_type
 
 from aiida_quantumespresso.calculations import _pop_parser_options, _uppercase_dict
 from aiida_quantumespresso.calculations.base import CalcJob
@@ -77,11 +83,14 @@ class BoltztrapCalculation(CalcJob):
             valid_type=orm.RemoteData,
             required=True,
             help='Output `RemoteData` folder of a completed NSCF `PwCalculation` from which the QE XML schema file '
-            '(`data-file-schema.xml`) is read.',
+            '(`data-file-schema.xml`) is read. Alternatively, the `remote_folder` of a completed '
+            '`BoltztrapCalculation`: its interpolation (`.bt2` file) is then reused and only the `integrate` step '
+            'is run.',
         )
         spec.input(
             'parameters',
             valid_type=orm.Dict,
+            serializer=to_aiida_type,
             required=False,
             validator=validate_parameters,
             help='Parameters for the `btp2` command line. Two sub-dictionaries are recognised: `interpolate` '
@@ -91,6 +100,7 @@ class BoltztrapCalculation(CalcJob):
         spec.input(
             'settings',
             valid_type=orm.Dict,
+            serializer=to_aiida_type,
             required=False,
             help='Optional settings: `PARENT_FOLDER_SYMLINK`, `NTHREADS`, `CMDLINE_INTERPOLATE`, `CMDLINE_INTEGRATE`.',
         )
@@ -211,13 +221,11 @@ class BoltztrapCalculation(CalcJob):
 
         parameters = self._get_parameters()
 
-        # Create the input subfolder locally so that it is guaranteed to exist in the remote working directory before
-        # the parent XML file is copied into it.
-        folder.get_subfolder(self._INPUT_SUBFOLDER, create=True)
-
-        # Validate the parent folder and derive the location of the XML file from the calculation that created it,
-        # rather than assuming the default pw.x layout: a missing source in the `remote_copy_list` is silently ignored
-        # at upload time, which would otherwise surface only as a cryptic `btp2` failure.
+        # Validate the parent folder and dispatch on the calculation that created it: the `remote_folder` of a
+        # previous `BoltztrapCalculation` means the interpolation is reused and only the `integrate` step is run,
+        # anything else is expected to provide the Quantum ESPRESSO XML file. The file locations are derived from the
+        # creator rather than assumed: a missing source in the `remote_copy_list` is silently ignored at upload time,
+        # which would otherwise surface only as a cryptic `btp2` failure.
         parent_folder = self.inputs.parent_folder
         parent_calcs = parent_folder.base.links.get_incoming(node_class=orm.CalcJobNode).all()
 
@@ -227,29 +235,52 @@ class BoltztrapCalculation(CalcJob):
             raise exceptions.UniquenessError(f'parent_folder<{parent_folder.pk}> has multiple parent calculations')
 
         parent_calc = parent_calcs[0].node
-
-        try:
-            parent_output_subfolder = parent_calc.process_class._OUTPUT_SUBFOLDER  # noqa: SLF001
-            parent_prefix = parent_calc.process_class._PREFIX  # noqa: SLF001
-        except (ValueError, AttributeError) as exception:
-            raise exceptions.InputValidationError(
-                f'the parent calculation `{parent_calc.process_type}` of parent_folder<{parent_folder.pk}> does not '
-                'define an output subfolder and prefix, so the location of the Quantum ESPRESSO XML file cannot be '
-                'determined: the `parent_folder` should be the `remote_folder` of a completed `PwCalculation`.'
-            ) from exception
-
-        parent_output_subfolder = settings.pop('PARENT_CALC_OUT_SUBFOLDER', parent_output_subfolder)
-
-        source_xml = pathlib.Path(parent_folder.get_remote_path()).joinpath(
-            parent_output_subfolder, f'{parent_prefix}.save', self._XML_FILE
-        )
-        dest_xml = str(pathlib.Path(self._INPUT_SUBFOLDER) / self._XML_FILE)
+        restart_from_interpolation = issubclass(parent_calc.process_class, BoltztrapCalculation)
 
         remote_copy_list = []
         remote_symlink_list = []
         symlink = settings.pop('PARENT_FOLDER_SYMLINK', False)
         target_list = remote_symlink_list if symlink else remote_copy_list
-        target_list.append((parent_folder.computer.uuid, str(source_xml), dest_xml))
+
+        if restart_from_interpolation:
+            # Inputs that only affect the skipped `interpolate` step would be silently ignored; reject them instead.
+            ignored = []
+            if 'parameters' in self.inputs and 'interpolate' in self.inputs.parameters.get_dict():
+                ignored.append('`parameters.interpolate`')
+            ignored.extend(
+                f'`settings.{key}`' for key in ('CMDLINE_INTERPOLATE', 'PARENT_CALC_OUT_SUBFOLDER') if key in settings
+            )
+            if ignored:
+                raise exceptions.InputValidationError(
+                    f'{", ".join(ignored)} have no effect when restarting from the interpolation of a previous '
+                    '`BoltztrapCalculation`: the `.bt2` file of the parent is reused as is.'
+                )
+
+            source_bt2 = pathlib.Path(parent_folder.get_remote_path()) / self._BT2_FILE
+            target_list.append((parent_folder.computer.uuid, str(source_bt2), self._BT2_FILE))
+        else:
+            try:
+                parent_output_subfolder = parent_calc.process_class._OUTPUT_SUBFOLDER  # noqa: SLF001
+                parent_prefix = parent_calc.process_class._PREFIX  # noqa: SLF001
+            except (ValueError, AttributeError) as exception:
+                raise exceptions.InputValidationError(
+                    f'the parent calculation `{parent_calc.process_type}` of parent_folder<{parent_folder.pk}> does '
+                    'not define an output subfolder and prefix, so the location of the Quantum ESPRESSO XML file '
+                    'cannot be determined: the `parent_folder` should be the `remote_folder` of a completed '
+                    '`PwCalculation` or `BoltztrapCalculation`.'
+                ) from exception
+
+            parent_output_subfolder = settings.pop('PARENT_CALC_OUT_SUBFOLDER', parent_output_subfolder)
+
+            # Create the input subfolder locally so that it is guaranteed to exist in the remote working directory
+            # before the parent XML file is copied into it.
+            folder.get_subfolder(self._INPUT_SUBFOLDER, create=True)
+
+            source_xml = pathlib.Path(parent_folder.get_remote_path()).joinpath(
+                parent_output_subfolder, f'{parent_prefix}.save', self._XML_FILE
+            )
+            dest_xml = str(pathlib.Path(self._INPUT_SUBFOLDER) / self._XML_FILE)
+            target_list.append((parent_folder.computer.uuid, str(source_xml), dest_xml))
 
         # Global flags that precede the ``btp2`` subcommand. The number of worker threads is only passed when requested.
         global_flags = []
@@ -257,13 +288,23 @@ class BoltztrapCalculation(CalcJob):
         if nthreads is not None:
             global_flags += ['-n', str(nthreads)]
 
-        cmdline_interpolate = (
-            global_flags
-            + ['interpolate', '-o', self._BT2_FILE]
-            + self._interpolate_flags(parameters.get('interpolate', {}))
-            + list(settings.pop('CMDLINE_INTERPOLATE', []))
-            + [self._INPUT_SUBFOLDER]
-        )
+        code_uuid = self.inputs.code.uuid
+        codes_info = []
+
+        if not restart_from_interpolation:
+            cmdline_interpolate = (
+                global_flags
+                + ['interpolate', '-o', self._BT2_FILE]
+                + self._interpolate_flags(parameters.get('interpolate', {}))
+                + list(settings.pop('CMDLINE_INTERPOLATE', []))
+                + [self._INPUT_SUBFOLDER]
+            )
+            codeinfo_interpolate = datastructures.CodeInfo()
+            codeinfo_interpolate.code_uuid = code_uuid
+            codeinfo_interpolate.cmdline_params = cmdline_interpolate
+            codeinfo_interpolate.stdout_name = self._INTERPOLATE_OUTPUT_FILE
+            codes_info.append(codeinfo_interpolate)
+
         cmdline_integrate = (
             global_flags
             + ['integrate']
@@ -271,33 +312,27 @@ class BoltztrapCalculation(CalcJob):
             + list(settings.pop('CMDLINE_INTEGRATE', []))
             + [self._BT2_FILE, str(parameters['integrate']['temperature'])]
         )
-
-        code_uuid = self.inputs.code.uuid
-
-        codeinfo_interpolate = datastructures.CodeInfo()
-        codeinfo_interpolate.code_uuid = code_uuid
-        codeinfo_interpolate.cmdline_params = cmdline_interpolate
-        codeinfo_interpolate.stdout_name = self._INTERPOLATE_OUTPUT_FILE
-
         codeinfo_integrate = datastructures.CodeInfo()
         codeinfo_integrate.code_uuid = code_uuid
         codeinfo_integrate.cmdline_params = cmdline_integrate
         codeinfo_integrate.stdout_name = self.metadata.options.output_filename
+        codes_info.append(codeinfo_integrate)
 
         calcinfo = datastructures.CalcInfo()
         calcinfo.uuid = str(self.uuid)
         # The two ``btp2`` invocations must run one after the other in the same job.
-        calcinfo.codes_info = [codeinfo_interpolate, codeinfo_integrate]
+        calcinfo.codes_info = codes_info
         calcinfo.codes_run_mode = datastructures.CodeRunMode.SERIAL
         calcinfo.remote_copy_list = remote_copy_list
         calcinfo.remote_symlink_list = remote_symlink_list
         calcinfo.retrieve_list = [
-            self._INTERPOLATE_OUTPUT_FILE,
             self.metadata.options.output_filename,
             self._TRACE_FILE,
             self._CONDTENS_FILE,
             self._HALLTENS_FILE,
         ]
+        if not restart_from_interpolation:
+            calcinfo.retrieve_list.append(self._INTERPOLATE_OUTPUT_FILE)
 
         _pop_parser_options(self, settings)
 

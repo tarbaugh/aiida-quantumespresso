@@ -117,6 +117,29 @@ builder.nscf.pw.parent_folder = scf_calc.outputs.remote_folder
 
 ---
 
+## Re-integrating at other temperatures
+
+The band interpolation is by far the more expensive of the two `btp2` steps and is independent of the `integrate`
+settings. To compute the transport coefficients at other temperatures (or with another `bins`/`scissor` setting)
+without recomputing it, run a new `BoltztrapCalculation` with the `remote_folder` of a previous one as its
+`parent_folder`: the `interpolation.bt2` file is reused and only `btp2 integrate` runs (seconds instead of minutes):
+
+```python
+from aiida.plugins import CalculationFactory
+
+previous = orm.load_node(<PK_OF_BOLTZTRAP_CALCULATION>)
+
+builder = CalculationFactory('quantumespresso.boltztrap').get_builder()
+builder.code = previous.inputs.code
+builder.parent_folder = previous.outputs.remote_folder
+builder.parameters = {'integrate': {'temperature': '100:1300:100'}}  # ranges are end-exclusive
+```
+
+Inputs that only affect the skipped interpolation step (`parameters.interpolate`, `settings.CMDLINE_INTERPOLATE`)
+are rejected in this mode, since they would have no effect.
+
+---
+
 ## Cleaning the working directories
 
 Setting `clean_workdir` to `True` will clean all remote directories of the called calculations after the workflow completes:

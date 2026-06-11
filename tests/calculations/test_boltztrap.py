@@ -150,3 +150,66 @@ def test_boltztrap_parser_options_settings(fixture_sandbox, generate_calc_job, g
     """Test that ``PARSER_OPTIONS`` in the settings are popped instead of being rejected as an unknown key."""
     inputs = generate_inputs(settings={'PARSER_OPTIONS': {'some_option': True}})
     generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)  # must not raise
+
+
+def test_boltztrap_restart_from_interpolation(
+    tmp_path, fixture_sandbox, fixture_localhost, generate_calc_job, generate_inputs, generate_remote_data
+):
+    """Test restarting from the interpolation of a previous ``BoltztrapCalculation``: integrate-only mode."""
+    inputs = generate_inputs(parameters={'integrate': {'temperature': '100:900:100'}})
+    inputs['parent_folder'] = generate_remote_data(fixture_localhost, str(tmp_path), 'quantumespresso.boltztrap')
+    remote = inputs['parent_folder']
+
+    calc_info = generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)
+
+    # only the `integrate` step is run and the parent `.bt2` is copied in
+    assert len(calc_info.codes_info) == 1
+    assert calc_info.codes_info[0].cmdline_params == ['integrate', 'interpolation.bt2', '100:900:100']
+    expected_bt2 = str(pathlib.Path(remote.get_remote_path()) / 'interpolation.bt2')
+    assert calc_info.remote_copy_list == [(remote.computer.uuid, expected_bt2, 'interpolation.bt2')]
+    assert calc_info.remote_symlink_list == []
+    assert 'interpolate.out' not in calc_info.retrieve_list
+    assert sorted(fixture_sandbox.get_content_list()) == []  # no staging subfolder needed
+
+
+def test_boltztrap_restart_symlink(
+    tmp_path, fixture_sandbox, fixture_localhost, generate_calc_job, generate_inputs, generate_remote_data
+):
+    """Test that ``PARENT_FOLDER_SYMLINK`` symlinks instead of copies the parent ``.bt2`` file."""
+    inputs = generate_inputs(with_symlink=True)
+    inputs['parent_folder'] = generate_remote_data(fixture_localhost, str(tmp_path), 'quantumespresso.boltztrap')
+
+    calc_info = generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)
+
+    assert calc_info.remote_copy_list == []
+    assert len(calc_info.remote_symlink_list) == 1
+    assert calc_info.remote_symlink_list[0][2] == 'interpolation.bt2'
+
+
+@pytest.mark.parametrize(
+    ('parameters', 'settings', 'match'),
+    [
+        ({'interpolate': {'multiplier': 10}}, None, r'`parameters.interpolate`.*have no effect'),
+        (None, {'CMDLINE_INTERPOLATE': ['-d']}, r'`settings.CMDLINE_INTERPOLATE`.*have no effect'),
+        (None, {'PARENT_CALC_OUT_SUBFOLDER': 'out'}, r'`settings.PARENT_CALC_OUT_SUBFOLDER`.*have no effect'),
+    ],
+)
+def test_boltztrap_restart_ignored_inputs(
+    tmp_path,
+    fixture_sandbox,
+    fixture_localhost,
+    generate_calc_job,
+    generate_inputs,
+    generate_remote_data,
+    parameters,
+    settings,
+    match,
+):
+    """Test that inputs only affecting the skipped `interpolate` step are rejected in restart mode."""
+    from aiida.common import exceptions
+
+    inputs = generate_inputs(parameters=parameters, settings=settings)
+    inputs['parent_folder'] = generate_remote_data(fixture_localhost, str(tmp_path), 'quantumespresso.boltztrap')
+
+    with pytest.raises(exceptions.InputValidationError, match=match):
+        generate_calc_job(fixture_sandbox, 'quantumespresso.boltztrap', inputs)
