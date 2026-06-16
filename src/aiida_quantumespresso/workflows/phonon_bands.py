@@ -10,20 +10,18 @@ This requires four computations:
 
 The high-symmetry q-point path is determined automatically with SeeK-path, unless an explicit path is provided through
 the ``bands_kpoints`` input. Note that SeeK-path can modify the structure to the standardized primitive cell, in which
-case the normalized structure is used for all calculations and returned as the ``primitive_structure`` output.
+case the normalized structure is used for all calculations and returned as the ``primitive_structure`` output. The
+SCF/PH/Q2R scaffolding is inherited from the
+:class:`~aiida_quantumespresso.workflows.phonon.PhononWorkChain` base class.
 """
 
-from aiida import orm, plugins
-from aiida.common import AttributeDict
-from aiida.engine import ToContext, WorkChain, if_
+from aiida import orm
+from aiida.engine import if_
 from aiida.orm.nodes.data.base import to_aiida_type
 
-import aiida_quantumespresso.utils.ase  # noqa: F401  - registers the `ase.Atoms` -> `StructureData` serializer
 from aiida_quantumespresso.calculations.functions.seekpath_structure_analysis import seekpath_structure_analysis
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
-from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
-from .protocols.utils import ProtocolMixin
+from .phonon import MatdynBaseWorkChain, PhBaseWorkChain, PhononWorkChain, Q2rBaseWorkChain
 
 
 def validate_inputs(value, _):
@@ -32,39 +30,13 @@ def validate_inputs(value, _):
         return 'Cannot specify both `bands_kpoints` and `bands_kpoints_distance`.'
 
 
-def validate_scf(value, _):
-    """Validate the SCF parameters."""
-    parameters = value['pw']['parameters'].get_dict()
-    if parameters.get('CONTROL', {}).get('calculation', 'scf') != 'scf':
-        return '`CONTROL.calculation` in `scf.pw.parameters` is not set to `scf`.'
-
-
-PwBaseWorkChain = plugins.WorkflowFactory('quantumespresso.pw.base')
-PhBaseWorkChain = plugins.WorkflowFactory('quantumespresso.ph.base')
-Q2rBaseWorkChain = plugins.WorkflowFactory('quantumespresso.q2r.base')
-MatdynBaseWorkChain = plugins.WorkflowFactory('quantumespresso.matdyn.base')
-
-
-class PhononBandsWorkChain(ProtocolMixin, WorkChain):
+class PhononBandsWorkChain(PhononWorkChain):
     """A WorkChain to compute the phonon band structure of a structure, using Quantum ESPRESSO."""
 
     @classmethod
     def define(cls, spec):
         """Define the process specification."""
         super().define(spec)
-        spec.input(
-            'structure',
-            valid_type=orm.StructureData,
-            serializer=to_aiida_type,
-            help='The input structure; an `ase.Atoms` instance is converted automatically.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
-        )
         spec.input(
             'bands_kpoints',
             valid_type=orm.KpointsData,
@@ -80,41 +52,6 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
             required=False,
             help='Minimum distance between q-points of the dispersion path, used by SeeK-path. Specify either this '
             'or `bands_kpoints`.',
-        )
-        spec.input(
-            'dry_run',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            required=False,
-            help='Terminate workchain steps before submitting calculations (test purposes only).',
-        )
-
-        spec.expose_inputs(
-            PwBaseWorkChain,
-            namespace='scf',
-            exclude=('clean_workdir', 'pw.structure', 'pw.parent_folder'),
-            namespace_options={
-                'help': 'Inputs for the `PwBaseWorkChain` of the `scf` calculation.',
-                'validator': validate_scf,
-            },
-        )
-        spec.expose_inputs(
-            PhBaseWorkChain,
-            namespace='ph',
-            exclude=('clean_workdir', 'ph.parent_folder'),
-            namespace_options={'help': 'Inputs for the `PhBaseWorkChain` of the `ph.x` calculation.'},
-        )
-        spec.expose_inputs(
-            Q2rBaseWorkChain,
-            namespace='q2r',
-            exclude=('clean_workdir', 'q2r.parent_folder'),
-            namespace_options={'help': 'Inputs for the `Q2rBaseWorkChain` of the `q2r.x` calculation.'},
-        )
-        spec.expose_inputs(
-            MatdynBaseWorkChain,
-            namespace='matdyn',
-            exclude=('clean_workdir', 'matdyn.force_constants', 'matdyn.kpoints', 'matdyn.parent_folder'),
-            namespace_options={'help': 'Inputs for the `MatdynBaseWorkChain` of the `matdyn.x` calculation.'},
         )
         spec.inputs.validator = validate_inputs
 
@@ -134,11 +71,6 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
             cls.results,
         )
 
-        spec.exit_code(401, 'ERROR_SUB_PROCESS_FAILED_SCF', message='the SCF sub process failed')
-        spec.exit_code(402, 'ERROR_SUB_PROCESS_FAILED_PH', message='the PH sub process failed')
-        spec.exit_code(403, 'ERROR_SUB_PROCESS_FAILED_Q2R', message='the Q2R sub process failed')
-        spec.exit_code(404, 'ERROR_SUB_PROCESS_FAILED_MATDYN', message='the MATDYN sub process failed')
-
         spec.output(
             'primitive_structure',
             valid_type=orm.StructureData,
@@ -151,9 +83,7 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
             required=False,
             help='The parameters used in the SeeK-path call to normalize the input or relaxed structure.',
         )
-        spec.expose_outputs(PhBaseWorkChain, namespace='ph')
         spec.expose_outputs(Q2rBaseWorkChain, namespace='q2r')
-        spec.expose_outputs(MatdynBaseWorkChain, namespace='matdyn')
 
     @classmethod
     def get_protocol_filepath(cls):
@@ -183,55 +113,22 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
             sub processes that are called by this workchain.
         :return: a process builder instance with all inputs defined ready for launch.
         """
-        from aiida_quantumespresso.workflows.protocols.utils import recursive_merge
-
         from aiida_quantumespresso.utils.ase import as_structure_data
 
         inputs = cls.get_protocol_inputs(protocol, overrides)
         structure = as_structure_data(structure)
 
-        scf = PwBaseWorkChain.get_builder_from_protocol(
-            pw_code, structure, protocol, overrides=inputs.get('scf', None), options=options, **kwargs
+        builder = cls.construct_phonon_builder(
+            pw_code, ph_code, q2r_code, matdyn_code, structure, protocol, inputs, options=options, **kwargs
         )
-        scf['pw'].pop('structure', None)
-        scf.pop('clean_workdir', None)
-
-        ph = PhBaseWorkChain.get_builder_from_protocol(
-            ph_code, protocol=protocol, overrides=inputs.get('ph', None), options=options, **kwargs
-        )
-        ph['ph'].pop('parent_folder', None)
-        ph.pop('clean_workdir', None)
-
-        builder = cls.get_builder()
-
-        for namespace_key, code in (('q2r', q2r_code), ('matdyn', matdyn_code)):
-            namespace = inputs.get(namespace_key, {})
-            metadata = namespace.get(namespace_key, {}).get('metadata', {'options': {}})
-
-            if options:
-                metadata['options'] = recursive_merge(metadata['options'], options)
-
-            metadata['options'] = cls.set_default_resources(metadata['options'], code.computer.scheduler_type)
-
-            builder[namespace_key][namespace_key]['code'] = code
-            builder[namespace_key][namespace_key]['parameters'] = orm.Dict(
-                namespace.get(namespace_key, {}).get('parameters', {})
-            )
-            builder[namespace_key][namespace_key]['metadata'] = metadata
-
-        builder.structure = structure
-        builder.clean_workdir = orm.Bool(inputs['clean_workdir'])
         if 'bands_kpoints_distance' in inputs:
             builder.bands_kpoints_distance = orm.Float(inputs['bands_kpoints_distance'])
-        builder.scf = scf
-        builder.ph = ph
 
         return builder
 
     def setup(self):
         """Initialize context variables that are used during the logical flow of the workchain."""
-        self.ctx.dry_run = 'dry_run' in self.inputs and self.inputs.dry_run.value
-        self.ctx.current_structure = self.inputs.structure
+        super().setup()
         self.ctx.bands_kpoints = self.inputs.get('bands_kpoints', None)
 
     def should_run_seekpath(self):
@@ -253,100 +150,9 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
         self.out('primitive_structure', result['primitive_structure'])
         self.out('seekpath_parameters', result['parameters'])
 
-    def run_scf(self):
-        """Run an SCF calculation, to generate the ground-state charge density."""
-        inputs = AttributeDict(self.exposed_inputs(PwBaseWorkChain, 'scf'))
-        inputs.pw.structure = self.ctx.current_structure
-        inputs.metadata.call_link_label = 'scf'
-        inputs = prepare_process_inputs(PwBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(PwBaseWorkChain, **inputs)
-        self.report(f'launching SCF PwBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_scf=future)
-
-    def inspect_scf(self):
-        """Verify that the SCF calculation finished successfully."""
-        workchain = self.ctx.workchain_scf
-        if not workchain.is_finished_ok:
-            self.report(f'SCF PwBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_SCF
-
-        self.ctx.scf_parent_folder = workchain.outputs.remote_folder
-
-    def run_ph(self):
-        """Run a PH calculation, to compute the dynamical matrices on the uniform q-point grid."""
-        inputs = AttributeDict(self.exposed_inputs(PhBaseWorkChain, 'ph'))
-        inputs.ph.parent_folder = self.ctx.scf_parent_folder
-        inputs.metadata.call_link_label = 'ph'
-        inputs = prepare_process_inputs(PhBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(PhBaseWorkChain, **inputs)
-        self.report(f'launching PhBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_ph=future)
-
-    def inspect_ph(self):
-        """Verify that the PH calculation finished successfully."""
-        workchain = self.ctx.workchain_ph
-        if not workchain.is_finished_ok:
-            self.report(f'PhBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_PH
-
-        self.ctx.ph_folder = workchain.outputs.retrieved
-
-    def run_q2r(self):
-        """Run a Q2R calculation, to transform the dynamical matrices into real-space force constants."""
-        inputs = AttributeDict(self.exposed_inputs(Q2rBaseWorkChain, 'q2r'))
-        inputs.q2r.parent_folder = self.ctx.ph_folder
-        inputs.metadata.call_link_label = 'q2r'
-        inputs = prepare_process_inputs(Q2rBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(Q2rBaseWorkChain, **inputs)
-        self.report(f'launching Q2rBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_q2r=future)
-
-    def inspect_q2r(self):
-        """Verify that the Q2R calculation finished successfully."""
-        workchain = self.ctx.workchain_q2r
-        if not workchain.is_finished_ok:
-            self.report(f'Q2rBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_Q2R
-
-        self.ctx.force_constants = workchain.outputs.force_constants
-
     def run_matdyn(self):
         """Run a MATDYN calculation, to interpolate the force constants along the high-symmetry q-point path."""
-        inputs = AttributeDict(self.exposed_inputs(MatdynBaseWorkChain, 'matdyn'))
-        inputs.matdyn.force_constants = self.ctx.force_constants
-        inputs.matdyn.kpoints = self.ctx.bands_kpoints
-        inputs.metadata.call_link_label = 'matdyn'
-        inputs = prepare_process_inputs(MatdynBaseWorkChain, inputs)
-
-        if self.ctx.dry_run:
-            return inputs
-
-        future = self.submit(MatdynBaseWorkChain, **inputs)
-        self.report(f'launching MatdynBaseWorkChain<{future.pk}>')
-
-        return ToContext(workchain_matdyn=future)
-
-    def inspect_matdyn(self):
-        """Verify that the MATDYN calculation finished successfully."""
-        workchain = self.ctx.workchain_matdyn
-        if not workchain.is_finished_ok:
-            self.report(f'MatdynBaseWorkChain failed with exit status {workchain.exit_status}')
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_MATDYN
+        return self.submit_matdyn(self.ctx.bands_kpoints)
 
     def results(self):
         """Attach the desired output nodes directly as outputs of the workchain."""
@@ -355,16 +161,3 @@ class PhononBandsWorkChain(ProtocolMixin, WorkChain):
         self.out_many(self.exposed_outputs(self.ctx.workchain_ph, PhBaseWorkChain, namespace='ph'))
         self.out_many(self.exposed_outputs(self.ctx.workchain_q2r, Q2rBaseWorkChain, namespace='q2r'))
         self.out_many(self.exposed_outputs(self.ctx.workchain_matdyn, MatdynBaseWorkChain, namespace='matdyn'))
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')
