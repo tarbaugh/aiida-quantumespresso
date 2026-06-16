@@ -28,6 +28,7 @@ howto/run_pdos
 howto/run_conductivity
 howto/run_epsilon
 howto/run_phonon_bands
+howto/run_thermal_conductivity
 howto/run_ml_comparison
 howto/customize_inputs
 ```
