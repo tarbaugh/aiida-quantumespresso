@@ -20,7 +20,7 @@ from aiida.orm.nodes.data.base import to_aiida_type
 
 import aiida_quantumespresso.utils.ase  # noqa: F401  - registers the `ase.Atoms` -> `StructureData` serializer
 from aiida_quantumespresso.utils.bands import get_nbands_from_parent_calculation
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -67,7 +67,7 @@ def validate_inputs(value, port_namespace):
         return 'Cannot specify both `nbands_factor` and `nscf.pw.parameters.SYSTEM.nbnd`.'
 
 
-class ScfNscfWorkChain(ProtocolMixin, WorkChain):
+class ScfNscfWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """Base workchain running an SCF followed by an NSCF calculation, to be subclassed by post-processing workflows."""
 
     @classmethod
@@ -79,13 +79,6 @@ class ScfNscfWorkChain(ProtocolMixin, WorkChain):
             valid_type=orm.StructureData,
             serializer=to_aiida_type,
             help='The input structure; an `ase.Atoms` instance is converted automatically.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'nbands_factor',
@@ -243,16 +236,3 @@ class ScfNscfWorkChain(ProtocolMixin, WorkChain):
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED_NSCF
 
         self.ctx.nscf_parent_folder = workchain.outputs.remote_folder
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

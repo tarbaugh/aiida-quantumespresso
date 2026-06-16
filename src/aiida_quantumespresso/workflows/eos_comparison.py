@@ -23,7 +23,7 @@ from aiida_quantumespresso.calculations.functions.fit_birch_murnaghan import (
     fit_birch_murnaghan,
     scale_structure,
 )
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -51,7 +51,7 @@ def validate_scf(value, _):
         return '`CONTROL.calculation` in `qe.pw.parameters` is not set to `scf`.'
 
 
-class EosComparisonWorkChain(ProtocolMixin, WorkChain):
+class EosComparisonWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """A WorkChain comparing the equations of state of Quantum ESPRESSO and an ASE (ML) calculator."""
 
     @classmethod
@@ -71,13 +71,6 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
             validator=validate_scale_factors,
             default=lambda: orm.List([0.94, 0.96, 0.98, 1.0, 1.02, 1.04, 1.06]),
             help='The volume scale factors at which the energy of both engines is evaluated.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -264,16 +257,3 @@ class EosComparisonWorkChain(ProtocolMixin, WorkChain):
         self.out('eos_qe', eos_qe)
         self.out('eos_ml', eos_ml)
         self.out('comparison', comparison)
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

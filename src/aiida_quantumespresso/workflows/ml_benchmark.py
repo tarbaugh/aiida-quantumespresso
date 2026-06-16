@@ -20,7 +20,7 @@ from aiida.engine import ToContext, WorkChain
 from aiida.orm.nodes.data.base import to_aiida_type
 
 from aiida_quantumespresso.calculations.functions.summarize_ml_benchmark import summarize_ml_benchmark
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 
 from .protocols.utils import ProtocolMixin
 
@@ -37,7 +37,7 @@ def validate_inputs(value, _):
         return 'The `phonons` comparison is enabled (`run_phonons`) but the `phonons` input namespace was not provided.'
 
 
-class MlBenchmarkWorkChain(ProtocolMixin, WorkChain):
+class MlBenchmarkWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """A WorkChain benchmarking an ASE (ML) calculator against Quantum ESPRESSO across several properties."""
 
     @classmethod
@@ -64,13 +64,6 @@ class MlBenchmarkWorkChain(ProtocolMixin, WorkChain):
             serializer=to_aiida_type,
             default=lambda: orm.Bool(True),
             help='If ``True``, compare the phonon dispersions at the relaxed geometry.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -315,16 +308,3 @@ class MlBenchmarkWorkChain(ProtocolMixin, WorkChain):
                 self.exposed_outputs(self.ctx.workchain_phonons, PhononComparisonWorkChain, namespace='phonons')
             )
         self.out('summary', summary)
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

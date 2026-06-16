@@ -25,7 +25,7 @@ from aiida_quantumespresso.calculations.functions.compute_lattice_thermal_conduc
 )
 from aiida_quantumespresso.calculations.functions.fit_birch_murnaghan import scale_structure
 from aiida_quantumespresso.calculations.functions.seekpath_structure_analysis import seekpath_structure_analysis
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -51,7 +51,7 @@ def validate_inputs(value, _):
         return 'Neither `qpoints` nor `qpoints_distance` was specified in the `phonons` namespace.'
 
 
-class LatticeThermalConductivityWorkChain(ProtocolMixin, WorkChain):
+class LatticeThermalConductivityWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """A WorkChain to estimate the lattice thermal conductivity of a structure with the Slack model."""
 
     @classmethod
@@ -83,13 +83,6 @@ class LatticeThermalConductivityWorkChain(ProtocolMixin, WorkChain):
             serializer=to_aiida_type,
             required=False,
             help='An explicit Grueneisen parameter to use instead of deriving it from the `scale_factors` volume set.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -273,16 +266,3 @@ class LatticeThermalConductivityWorkChain(ProtocolMixin, WorkChain):
         reference = min(range(len(volumes)), key=lambda index: abs(volumes[index] - reference_volume))
         self.out('phonon_dos', self.ctx[f'phonon_{reference}'].outputs.output_phonon_dos)
         self.out('lattice_thermal_conductivity', lattice)
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

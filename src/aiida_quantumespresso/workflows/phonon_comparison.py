@@ -21,7 +21,7 @@ from aiida.orm.nodes.data.base import to_aiida_type
 
 from aiida_quantumespresso.calculations.functions.compare_phonon_bands import compare_phonon_bands
 from aiida_quantumespresso.calculations.functions.seekpath_structure_analysis import seekpath_structure_analysis
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -30,7 +30,7 @@ PhononBandsWorkChain = plugins.WorkflowFactory('quantumespresso.phonon_bands')
 AseBaseWorkChain = plugins.WorkflowFactory('quantumespresso.ase.base')
 
 
-class PhononComparisonWorkChain(ProtocolMixin, WorkChain):
+class PhononComparisonWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """A WorkChain comparing the QE DFPT and ASE (ML) phonon dispersions on the identical q-point path."""
 
     @classmethod
@@ -50,13 +50,6 @@ class PhononComparisonWorkChain(ProtocolMixin, WorkChain):
             serializer=to_aiida_type,
             required=False,
             help='Minimum distance between q-points of the dispersion path, used by SeeK-path.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -274,16 +267,3 @@ class PhononComparisonWorkChain(ProtocolMixin, WorkChain):
         self.out_many(self.exposed_outputs(self.ctx.workchain_qe, PhononBandsWorkChain, namespace='qe'))
         self.out_many(self.exposed_outputs(self.ctx.workchain_ml, AseBaseWorkChain, namespace='ml'))
         self.out('comparison', comparison)
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

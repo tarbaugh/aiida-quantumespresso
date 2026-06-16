@@ -19,7 +19,7 @@ from aiida.engine import WorkChain
 from aiida.orm.nodes.data.base import to_aiida_type
 
 from aiida_quantumespresso.calculations.functions.compare_relaxed_structures import compare_relaxed_structures
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -28,7 +28,7 @@ PwRelaxWorkChain = plugins.WorkflowFactory('quantumespresso.pw.relax')
 AseBaseWorkChain = plugins.WorkflowFactory('quantumespresso.ase.base')
 
 
-class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
+class RelaxComparisonWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """A WorkChain to relax a structure with both Quantum ESPRESSO and an ASE (ML) calculator and compare them."""
 
     @classmethod
@@ -40,13 +40,6 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
             valid_type=orm.StructureData,
             serializer=to_aiida_type,
             help='The input structure relaxed by both engines; an `ase.Atoms` instance is converted automatically.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -205,16 +198,3 @@ class RelaxComparisonWorkChain(ProtocolMixin, WorkChain):
         self.out_many(self.exposed_outputs(self.ctx.workchain_qe, PwRelaxWorkChain, namespace='qe'))
         self.out_many(self.exposed_outputs(self.ctx.workchain_ml, AseBaseWorkChain, namespace='ml'))
         self.out('comparison', comparison)
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

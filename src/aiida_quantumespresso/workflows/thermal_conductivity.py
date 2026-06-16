@@ -23,7 +23,7 @@ from aiida.orm.nodes.data.base import to_aiida_type
 
 import aiida_quantumespresso.utils.ase  # noqa: F401  - registers the `ase.Atoms` -> `StructureData` serializer
 from aiida_quantumespresso.calculations.functions.combine_thermal_conductivity import combine_thermal_conductivity
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -32,7 +32,7 @@ ConductivityWorkChain = plugins.WorkflowFactory('quantumespresso.conductivity')
 LatticeThermalConductivityWorkChain = plugins.WorkflowFactory('quantumespresso.lattice_thermal_conductivity')
 
 
-class ThermalConductivityWorkChain(ProtocolMixin, WorkChain):
+class ThermalConductivityWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """A WorkChain to compute the total (electronic + lattice) thermal conductivity of a structure."""
 
     @classmethod
@@ -60,13 +60,6 @@ class ThermalConductivityWorkChain(ProtocolMixin, WorkChain):
             default=lambda: orm.Float(0.0),
             help='The carrier concentration (e/uc) at which the electronic thermal conductivity is evaluated; the '
             'default of zero selects the intrinsic (undoped) chemical potential at each temperature.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -263,16 +256,3 @@ class ThermalConductivityWorkChain(ProtocolMixin, WorkChain):
             self.exposed_outputs(self.ctx.workchain_lattice, LatticeThermalConductivityWorkChain, namespace='lattice')
         )
         self.out('thermal_conductivity', total)
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')

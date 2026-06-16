@@ -22,7 +22,7 @@ from aiida.engine import ToContext, WorkChain
 from aiida.orm.nodes.data.base import to_aiida_type
 
 import aiida_quantumespresso.utils.ase  # noqa: F401  - registers the `ase.Atoms` -> `StructureData` serializer
-from aiida_quantumespresso.utils.cleanup import clean_workchain_calcs
+from aiida_quantumespresso.utils.cleanup import CleanWorkdirMixin
 from aiida_quantumespresso.utils.mapping import prepare_process_inputs
 
 from .protocols.utils import ProtocolMixin
@@ -40,7 +40,7 @@ def validate_scf(value, _):
         return '`CONTROL.calculation` in `scf.pw.parameters` is not set to `scf`.'
 
 
-class PhononWorkChain(ProtocolMixin, WorkChain):
+class PhononWorkChain(CleanWorkdirMixin, ProtocolMixin, WorkChain):
     """Base workchain running SCF -> PH -> Q2R -> MATDYN, to be subclassed by phonon post-processing workflows."""
 
     @classmethod
@@ -52,13 +52,6 @@ class PhononWorkChain(ProtocolMixin, WorkChain):
             valid_type=orm.StructureData,
             serializer=to_aiida_type,
             help='The input structure; an `ase.Atoms` instance is converted automatically.',
-        )
-        spec.input(
-            'clean_workdir',
-            valid_type=orm.Bool,
-            serializer=to_aiida_type,
-            default=lambda: orm.Bool(False),
-            help='If ``True``, work directories of all called calculations will be cleaned at the end of execution.',
         )
         spec.input(
             'dry_run',
@@ -274,16 +267,3 @@ class PhononWorkChain(ProtocolMixin, WorkChain):
         if not workchain.is_finished_ok:
             self.report(f'MatdynBaseWorkChain failed with exit status {workchain.exit_status}')
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED_MATDYN
-
-    def on_terminated(self):
-        """Clean the working directories of all child calculations if `clean_workdir=True` in the inputs."""
-        super().on_terminated()
-
-        if self.inputs.clean_workdir.value is False:
-            self.report('remote folders will not be cleaned')
-            return
-
-        cleaned_calcs = clean_workchain_calcs(self.node)
-
-        if cleaned_calcs:
-            self.report(f'cleaned remote folders of calculations: {" ".join(map(str, cleaned_calcs))}')
