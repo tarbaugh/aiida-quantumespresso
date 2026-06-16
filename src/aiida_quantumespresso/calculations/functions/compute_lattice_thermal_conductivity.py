@@ -48,10 +48,10 @@ def _dos_frequency_moments(xy_dos):
 
     :param xy_dos: an ``XyData`` node holding ``g(nu)`` with the wavenumber ``nu`` in cm^-1 on the x-axis and the
         density of states on the y-axis (the ``fldos`` output of matdyn.x).
-    :return: a tuple ``(rms_wavenumber, max_wavenumber, imaginary_fraction)``, all wavenumbers in cm^-1. The
+    :return: a tuple ``(rms_wavenumber, max_wavenumber, has_imaginary_modes)``, with the wavenumbers in cm^-1. The
         root-mean-square wavenumber is the square root of the DOS-weighted second moment over the physical
-        (``nu >= 0``) part of the spectrum; the imaginary fraction is the share of the DOS at negative wavenumbers,
-        i.e. soft / dynamically unstable modes.
+        (``nu >= 0``) part of the spectrum; ``has_imaginary_modes`` is ``True`` when the DOS carries any weight at
+        negative wavenumbers, i.e. soft / dynamically unstable modes.
     """
     frequency = np.asarray(xy_dos.get_x()[1], dtype=float)
     dos = np.asarray(xy_dos.get_y()[0][1], dtype=float)
@@ -59,21 +59,25 @@ def _dos_frequency_moments(xy_dos):
     order = np.argsort(frequency)
     frequency, dos = frequency[order], dos[order]
 
-    total = _trapezoid(dos, frequency)
-    if total <= 0.0:
-        raise ValueError('the phonon density of states integrates to zero; it cannot be used for the Slack model.')
-
     physical = frequency >= 0.0
     norm = _trapezoid(dos[physical], frequency[physical])
+    if norm <= 0.0:
+        raise ValueError(
+            'the phonon density of states has no positive-frequency weight; the structure appears to be dynamically '
+            'unstable (all modes imaginary) or the DOS is empty.'
+        )
     second_moment = _trapezoid(dos[physical] * frequency[physical] ** 2, frequency[physical]) / norm
 
+    # Any DOS weight at a negative wavenumber signals soft / imaginary modes: a dynamically stable crystal has none
+    # (matdyn writes no negative-frequency bins). This presence check is independent of how much negative weight there
+    # is, so even a single soft bin is detected.
     negative = frequency < 0.0
-    imaginary_fraction = _trapezoid(dos[negative], frequency[negative]) / total if negative.sum() > 1 else 0.0
+    has_imaginary_modes = bool(negative.any() and dos[negative].max() > 0.0)
 
     significant = dos > 1.0e-3 * dos.max()
     max_wavenumber = float(frequency[significant].max()) if significant.any() else float(frequency.max())
 
-    return float(np.sqrt(second_moment)), max_wavenumber, float(imaginary_fraction)
+    return float(np.sqrt(second_moment)), max_wavenumber, has_imaginary_modes
 
 
 @calcfunction
@@ -103,11 +107,10 @@ def compute_lattice_thermal_conductivity(structure, parameters, **phonon_dos):
 
     rms_wavenumber = np.empty(len(keys))
     max_wavenumber = np.empty(len(keys))
-    imaginary_fraction = np.empty(len(keys))
+    has_imaginary_modes = []
     for index, key in enumerate(keys):
-        rms_wavenumber[index], max_wavenumber[index], imaginary_fraction[index] = _dos_frequency_moments(
-            phonon_dos[key]
-        )
+        rms_wavenumber[index], max_wavenumber[index], imaginary = _dos_frequency_moments(phonon_dos[key])
+        has_imaginary_modes.append(imaginary)
 
     # The equilibrium-volume DOS is the one whose cell volume is closest to that of the input ``structure``.
     reference_volume = structure.get_cell_volume()
@@ -164,7 +167,7 @@ def compute_lattice_thermal_conductivity(structure, parameters, **phonon_dos):
             'volume_per_atom': float(reference_volume / n_atoms),
             'delta': delta,
             'max_frequency': float(max_wavenumber[reference]),
-            'has_imaginary_modes': bool(imaginary_fraction[reference] > 1.0e-3),
+            'has_imaginary_modes': has_imaginary_modes[reference],
             'model': 'Slack',
             'units': {
                 'lattice_thermal_conductivity': 'W/(m*K)',

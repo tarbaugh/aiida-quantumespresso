@@ -197,8 +197,6 @@ class ThermalConductivityWorkChain(ProtocolMixin, WorkChain):
 
     def run_components(self):
         """Launch the electronic and lattice work chains in parallel."""
-        dry_run_inputs = {}
-
         electronic = AttributeDict(self.exposed_inputs(ConductivityWorkChain, 'electronic'))
         electronic.structure = self.inputs.structure
         electronic.metadata.call_link_label = 'electronic'
@@ -219,8 +217,6 @@ class ThermalConductivityWorkChain(ProtocolMixin, WorkChain):
         lattice_future = self.submit(LatticeThermalConductivityWorkChain, **lattice)
         self.report(f'launching LatticeThermalConductivityWorkChain<{lattice_future.pk}>')
         self.to_context(workchain_lattice=lattice_future)
-
-        return dry_run_inputs
 
     def inspect_components(self):
         """Verify that both the electronic and lattice sub processes finished successfully."""

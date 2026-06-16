@@ -101,6 +101,39 @@ def test_imaginary_modes_flagged(silicon):
     assert result['has_imaginary_modes'] is True
 
 
+def test_single_imaginary_bin_flagged(silicon):
+    """A single negative-frequency bin with weight is enough to flag imaginary modes."""
+    grid = np.linspace(0.0, 540.0, 200)
+    frequency = np.concatenate([[-5.0], grid])
+    dos = np.concatenate([[0.5], np.where(grid <= 517.0, grid**2, 0.0)])
+    xy_data = orm.XyData()
+    xy_data.set_x(frequency, 'frequency', 'cm^(-1)')
+    xy_data.set_y(dos, 'dos', 'states * cm')
+
+    result = compute_lattice_thermal_conductivity(
+        silicon,
+        orm.Dict({'volumes': [silicon.get_cell_volume()], 'temperatures': [300.0], 'gruneisen_parameter': 1.0}),
+        dos_0=xy_data,
+    ).get_dict()
+
+    assert result['has_imaginary_modes'] is True
+
+
+def test_fully_imaginary_dos_raises(silicon):
+    """A DOS with no positive-frequency weight (all modes imaginary) is rejected with a clear error."""
+    frequency = np.linspace(-200.0, -1.0, 100)
+    xy_data = orm.XyData()
+    xy_data.set_x(frequency, 'frequency', 'cm^(-1)')
+    xy_data.set_y(np.abs(frequency), 'dos', 'states * cm')
+
+    with pytest.raises(ValueError, match='no positive-frequency weight'):
+        compute_lattice_thermal_conductivity(
+            silicon,
+            orm.Dict({'volumes': [silicon.get_cell_volume()], 'temperatures': [300.0], 'gruneisen_parameter': 1.0}),
+            dos_0=xy_data,
+        )
+
+
 def test_single_volume_without_gamma_raises(silicon):
     """A single volume and no explicit Grueneisen parameter cannot define gamma and must raise."""
     with pytest.raises(ValueError, match='at least two volumes'):
