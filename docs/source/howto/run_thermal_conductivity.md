@@ -51,7 +51,11 @@ The Slack model is a **screening-level** estimate, typically accurate to about a
 
 ## The electronic contribution: CRTA and the Lorenz number
 
-BoltzTraP2 solves the electronic Boltzmann transport equation within the constant relaxation-time approximation, so it returns the electrical and electronic thermal conductivity *divided by the relaxation time*, $\sigma/\tau$ and $\kappa_\mathrm{e}/\tau$. Multiplying by a relaxation time $\tau$ (the `relaxation_time` input, default $10^{-14}$ s) gives absolute values, while the **Lorenz number** $L = \kappa_\mathrm{e}/(\sigma T)$ is a ratio of the two and is therefore independent of $\tau$ (it approaches the Sommerfeld value $2.44\times10^{-8}\ \mathrm{W\,\Omega\,K^{-2}}$ in the degenerate limit). The electronic part is evaluated at the chemical potential realising a target `carrier_concentration` (the intrinsic, undoped point by default).
+BoltzTraP2 solves the electronic Boltzmann transport equation within the constant relaxation-time approximation, so it returns the electrical and electronic thermal conductivity *divided by the relaxation time*, $\sigma/\tau$ and $\kappa_\mathrm{e}/\tau$. Multiplying by a relaxation time $\tau$ (the `relaxation_time` input, default $10^{-14}$ s) gives absolute values, while the **Lorenz number** $L = \kappa_\mathrm{e}/(\sigma T)$ is a ratio of the two and is therefore independent of $\tau$. The electronic part is evaluated at the chemical potential realising a target `carrier_concentration` (the intrinsic, undoped point by default).
+
+:::{note}
+The Lorenz number approaches the Sommerfeld value $2.44\times10^{-8}\ \mathrm{W\,\Omega\,K^{-2}}$ only in the **degenerate** (heavily doped or metallic) limit. At the **intrinsic** point of a gapped semiconductor — the default — it is strongly *bipolar-enhanced*, because electron-hole pairs carry heat without net charge: for silicon the work chain returns $L \approx 9\times10^{-7}\ \mathrm{W\,\Omega\,K^{-2}}$ at the intrinsic point, falling back to $\approx 2\times10^{-8}$ when the cell is driven degenerate through `carrier_concentration`. A large intrinsic-point Lorenz number is therefore physical, not a sign of error.
+:::
 
 For an intrinsic semiconductor such as silicon $\kappa_\mathrm{e}$ is negligible and the total is dominated by $\kappa_\mathrm{L}$; for metals and degenerate semiconductors $\kappa_\mathrm{e}$ matters and the choice of $\tau$ becomes important.
 

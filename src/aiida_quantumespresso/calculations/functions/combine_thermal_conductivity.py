@@ -107,8 +107,9 @@ def combine_thermal_conductivity(transport_coefficients, lattice, parameters):
                 'Total thermal conductivity kappa = kappa_e + kappa_L. The electronic part is from BoltzTraP2 within '
                 'the constant relaxation-time approximation, evaluated at the selected carrier concentration and '
                 'scaled by `relaxation_time`; the tau-independent Lorenz number and kappa_e/tau are reported '
-                'alongside. The lattice part is the 1/T Slack model. For the Sommerfeld limit the Lorenz number '
-                'approaches 2.44e-8 W*ohm/K^2.'
+                'alongside. The lattice part is the 1/T Slack model. The Lorenz number is strongly bipolar-enhanced '
+                'at the intrinsic point of a gapped semiconductor (electron-hole pairs carry heat) and approaches '
+                'the Sommerfeld value 2.44e-8 W*ohm/K^2 only in the degenerate (heavily doped or metallic) limit.'
             ),
         }
     )
