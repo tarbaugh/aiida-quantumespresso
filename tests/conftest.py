@@ -1467,3 +1467,53 @@ def generate_workchain_lattice_thermal_conductivity(
         return generate_workchain('quantumespresso.lattice_thermal_conductivity', inputs)
 
     return _generate_workchain_lattice_thermal_conductivity
+
+
+@pytest.fixture
+def generate_workchain_thermal_conductivity(
+    generate_workchain, generate_inputs_pw, generate_kpoints_mesh, fixture_code
+):
+    """Generate an instance of a `ThermalConductivityWorkChain`."""
+
+    def _generate_workchain_thermal_conductivity():
+        from aiida.orm import Bool, Dict, List
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        # The electronic (`ConductivityWorkChain`) namespace: scf, symmetry-preserving nscf and BoltzTraP2.
+        scf_pw_inputs = generate_inputs_pw()
+        kpoints = scf_pw_inputs.pop('kpoints')
+        structure = scf_pw_inputs.pop('structure')
+        nscf_pw_inputs = generate_inputs_pw()
+        nscf_pw_inputs.pop('kpoints')
+        nscf_pw_inputs.pop('structure')
+        nscf_pw_inputs['parameters']['CONTROL']['calculation'] = 'nscf'
+        nscf_pw_inputs['parameters']['SYSTEM']['occupations'] = 'tetrahedra'
+        electronic = {
+            'scf': {'pw': scf_pw_inputs, 'kpoints': kpoints},
+            'nscf': {'pw': nscf_pw_inputs, 'kpoints': kpoints},
+            'boltztrap': {
+                'code': fixture_code('quantumespresso.boltztrap'),
+                'parameters': Dict({'interpolate': {'multiplier': 5}, 'integrate': {'temperature': '300:800:50'}}),
+                'metadata': {'options': get_default_options()},
+            },
+        }
+
+        # The lattice (`LatticeThermalConductivityWorkChain`) namespace.
+        phonon_namespaces, _ = _phonon_stack_namespaces(generate_inputs_pw, generate_kpoints_mesh, fixture_code)
+        lattice = {
+            'scale_factors': List([0.98, 1.0, 1.02]),
+            'temperatures': List([300.0, 600.0]),
+            'phonons': {'qpoints': generate_kpoints_mesh(4), **phonon_namespaces},
+        }
+
+        inputs = {
+            'structure': structure,
+            'electronic': electronic,
+            'lattice': lattice,
+            'dry_run': Bool(True),
+        }
+
+        return generate_workchain('quantumespresso.thermal_conductivity', inputs)
+
+    return _generate_workchain_thermal_conductivity

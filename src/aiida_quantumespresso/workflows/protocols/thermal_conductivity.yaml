@@ -1,0 +1,30 @@
+# The electronic and lattice presets live in the protocols of the sub work chains (`conductivity` and
+# `lattice_thermal_conductivity`); overrides are passed through under the `electronic` and `lattice` keys. This
+# protocol only sets the constant relaxation time and the carrier concentration of the electronic-to-absolute mapping.
+default_inputs:
+    clean_workdir: False
+    relaxation_time: 1.0e-14
+    carrier_concentration: 0.0
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to compute the total thermal conductivity at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to compute the total thermal conductivity at high precision at higher computational cost.'
+    fast:
+        description: 'Protocol to compute the total thermal conductivity at low precision at minimal computational cost for testing purposes.'
+meta_inputs_schema:
+    electronic:
+        scf: &pw_base_meta
+            meta_parameters:
+                conv_thr_per_atom:
+                etot_conv_thr_per_atom:
+            pseudo_family:
+        nscf: *pw_base_meta
+    lattice:
+        phonons:
+            scf:
+                meta_parameters:
+                    conv_thr_per_atom:
+                    etot_conv_thr_per_atom:
+                pseudo_family:
