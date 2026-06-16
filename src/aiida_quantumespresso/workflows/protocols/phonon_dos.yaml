@@ -1,0 +1,42 @@
+default_inputs:
+    clean_workdir: False
+    qpoints_distance: 0.15
+    scf:
+        pw:
+            parameters:
+                CONTROL:
+                    restart_mode: from_scratch
+    q2r:
+        q2r:
+            parameters:
+                INPUT:
+                    zasr: crystal
+            metadata:
+                options:
+                    max_wallclock_seconds: 3600  # One hour
+                    withmpi: True
+    matdyn:
+        matdyn:
+            parameters:
+                INPUT:
+                    asr: crystal
+            metadata:
+                options:
+                    max_wallclock_seconds: 3600  # One hour
+                    withmpi: True
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to compute the phonon density of states at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to compute the phonon density of states at high precision at higher computational cost.'
+        qpoints_distance: 0.10
+    fast:
+        description: 'Protocol to compute the phonon density of states at low precision at minimal computational cost for testing purposes.'
+        qpoints_distance: 0.30
+meta_inputs_schema:
+    scf:
+        meta_parameters:
+            conv_thr_per_atom:
+            etot_conv_thr_per_atom:
+        pseudo_family:

@@ -1,0 +1,24 @@
+# The phonon presets (q-mesh, scf/ph/q2r/matdyn) live in the `PhononDosWorkChain` protocol (`phonon_dos.yaml`);
+# overrides are passed through under the `phonons` key. This protocol only sets the quasi-harmonic volume set and the
+# temperature grid for the Slack model.
+default_inputs:
+    clean_workdir: False
+    scale_factors: [0.98, 1.0, 1.02]
+    temperatures: [200, 300, 400, 500, 600, 700, 800, 900, 1000]
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to estimate the lattice thermal conductivity at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to estimate the lattice thermal conductivity at high precision at higher computational cost.'
+        scale_factors: [0.96, 0.98, 1.0, 1.02, 1.04]
+    fast:
+        description: 'Protocol to estimate the lattice thermal conductivity at low precision at minimal computational cost for testing purposes.'
+        scale_factors: [0.98, 1.0, 1.02]
+meta_inputs_schema:
+    phonons:
+        scf:
+            meta_parameters:
+                conv_thr_per_atom:
+                etot_conv_thr_per_atom:
+            pseudo_family:

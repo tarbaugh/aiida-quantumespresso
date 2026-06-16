@@ -1381,3 +1381,89 @@ def generate_workchain_eos_comparison(generate_workchain, generate_inputs_pw, fi
         return generate_workchain(entry_point, inputs)
 
     return _generate_workchain_eos_comparison
+
+
+def _phonon_stack_namespaces(generate_inputs_pw, generate_kpoints_mesh, fixture_code):
+    """Return the ``scf``/``ph``/``q2r``/``matdyn`` input namespaces shared by the phonon DOS work chains."""
+    from aiida.orm import Dict
+
+    from aiida_quantumespresso.utils.resources import get_default_options
+
+    scf_pw_inputs = generate_inputs_pw()
+    kpoints = scf_pw_inputs.pop('kpoints')
+    structure = scf_pw_inputs.pop('structure')
+
+    namespaces = {
+        'scf': {'pw': scf_pw_inputs, 'kpoints': kpoints},
+        'ph': {
+            'ph': {
+                'code': fixture_code('quantumespresso.ph'),
+                'parameters': Dict({'INPUTPH': {'tr2_ph': 1.0e-16}}),
+                'metadata': {'options': get_default_options()},
+            },
+            'qpoints': generate_kpoints_mesh(2),
+        },
+        'q2r': {
+            'q2r': {
+                'code': fixture_code('quantumespresso.q2r'),
+                'parameters': Dict({'INPUT': {'zasr': 'crystal'}}),
+                'metadata': {'options': get_default_options()},
+            }
+        },
+        'matdyn': {
+            'matdyn': {
+                'code': fixture_code('quantumespresso.matdyn'),
+                'parameters': Dict({'INPUT': {'asr': 'crystal'}}),
+                'metadata': {'options': get_default_options()},
+            }
+        },
+    }
+    return namespaces, structure
+
+
+@pytest.fixture
+def generate_workchain_phonon_dos(generate_workchain, generate_inputs_pw, generate_kpoints_mesh, fixture_code):
+    """Generate an instance of a `PhononDosWorkChain`."""
+
+    def _generate_workchain_phonon_dos():
+        from aiida.orm import Bool
+
+        namespaces, structure = _phonon_stack_namespaces(generate_inputs_pw, generate_kpoints_mesh, fixture_code)
+
+        inputs = {
+            'structure': structure,
+            'qpoints': generate_kpoints_mesh(4),  # the (denser) q-mesh on which the phonon DOS is accumulated
+            'dry_run': Bool(True),
+            **namespaces,
+        }
+
+        return generate_workchain('quantumespresso.phonon_dos', inputs)
+
+    return _generate_workchain_phonon_dos
+
+
+@pytest.fixture
+def generate_workchain_lattice_thermal_conductivity(
+    generate_workchain, generate_inputs_pw, generate_kpoints_mesh, fixture_code
+):
+    """Generate an instance of a `LatticeThermalConductivityWorkChain`."""
+
+    def _generate_workchain_lattice_thermal_conductivity(scale_factors=None, gruneisen_parameter=None):
+        from aiida.orm import Bool, Float, List
+
+        namespaces, structure = _phonon_stack_namespaces(generate_inputs_pw, generate_kpoints_mesh, fixture_code)
+        phonons = {'qpoints': generate_kpoints_mesh(4), **namespaces}
+
+        inputs = {
+            'structure': structure,
+            'scale_factors': List(scale_factors if scale_factors is not None else [0.98, 1.0, 1.02]),
+            'temperatures': List([300.0, 600.0]),
+            'phonons': phonons,
+            'dry_run': Bool(True),
+        }
+        if gruneisen_parameter is not None:
+            inputs['gruneisen_parameter'] = Float(gruneisen_parameter)
+
+        return generate_workchain('quantumespresso.lattice_thermal_conductivity', inputs)
+
+    return _generate_workchain_lattice_thermal_conductivity
