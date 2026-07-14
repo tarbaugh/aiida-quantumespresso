@@ -234,6 +234,7 @@ class ElectronicCharacterizationWorkChain(CleanWorkdirMixin, ProtocolMixin, Work
         overrides=None,
         options=None,
         spin_orbit_coupling=False,
+        run_relax=True,
         **kwargs,
     ):
         """Return a builder prepopulated with inputs selected according to the chosen protocol.
@@ -247,6 +248,8 @@ class ElectronicCharacterizationWorkChain(CleanWorkdirMixin, ProtocolMixin, Work
             the ``CalcJobs`` that are nested in this work chain.
         :param spin_orbit_coupling: if ``True``, run every ``pw.x`` step as a fully-relativistic, noncollinear
             calculation with spin-orbit coupling (this also selects a fully-relativistic pseudopotential family).
+        :param run_relax: if ``False``, the ``relax`` namespace is left unpopulated and the input structure is
+            characterized as given (skip the variable-cell relaxation).
         :param kwargs: additional keyword arguments that will be passed to the ``get_builder_from_protocol`` of all the
             sub processes that are called by this workchain (e.g. ``electronic_type``, ``pseudo_family``).
         :return: a process builder instance with all inputs defined ready for launch.
@@ -261,11 +264,12 @@ class ElectronicCharacterizationWorkChain(CleanWorkdirMixin, ProtocolMixin, Work
 
         args = (pw_code, structure, protocol)
 
-        relax = PwRelaxWorkChain.get_builder_from_protocol(
-            *args, overrides=inputs.get('relax', None), options=options, **kwargs
-        )
-        relax.pop('structure', None)
-        relax.pop('clean_workdir', None)
+        if run_relax:
+            relax = PwRelaxWorkChain.get_builder_from_protocol(
+                *args, overrides=inputs.get('relax', None), options=options, **kwargs
+            )
+            relax.pop('structure', None)
+            relax.pop('clean_workdir', None)
 
         scf = PwBaseWorkChain.get_builder_from_protocol(
             *args, overrides=inputs.get('scf', None), options=options, **kwargs
@@ -299,7 +303,8 @@ class ElectronicCharacterizationWorkChain(CleanWorkdirMixin, ProtocolMixin, Work
             builder.nbands_factor = orm.Float(inputs['nbands_factor'])
         if 'bands_kpoints_distance' in inputs:
             builder.bands_kpoints_distance = orm.Float(inputs['bands_kpoints_distance'])
-        builder.relax = relax
+        if run_relax:
+            builder.relax = relax
         builder.scf = scf
         builder.bands = bands
         builder.nscf = nscf

@@ -66,6 +66,15 @@ def test_spin_orbit_coupling_sets_noncollinear(get_generator_inputs):
         assert system.get('lspinorb') is True
 
 
+def test_run_relax_false_skips_relax(get_generator_inputs):
+    """With ``run_relax=False`` the optional relaxation namespace is left unpopulated (so the outline skips it)."""
+    builder = ElectronicCharacterizationWorkChain.get_builder_from_protocol(**get_generator_inputs, run_relax=False)
+    assert 'relax' not in builder._inputs(prune=True)  # noqa: SLF001
+
+    builder = ElectronicCharacterizationWorkChain.get_builder_from_protocol(**get_generator_inputs)
+    assert 'relax' in builder._inputs(prune=True)  # noqa: SLF001
+
+
 def test_electronic_type_insulator(get_generator_inputs):
     """The ``electronic_type`` keyword is threaded through to the underlying ``pw.x`` steps."""
     builder = ElectronicCharacterizationWorkChain.get_builder_from_protocol(

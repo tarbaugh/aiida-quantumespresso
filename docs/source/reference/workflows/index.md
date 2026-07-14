@@ -19,6 +19,7 @@ phonon_bands
 phonon_dos
 lattice_thermal_conductivity
 thermal_conductivity
+electronic_characterization
 relax_comparison
 eos_comparison
 ```
