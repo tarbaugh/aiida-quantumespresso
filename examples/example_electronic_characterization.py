@@ -104,7 +104,14 @@ def characterize(
         )
 
     if options is None:
-        options = {'resources': {'num_machines': 1}, 'withmpi': False, 'max_wallclock_seconds': 3600}
+        # Both `num_machines` and `num_mpiprocs_per_machine` are given so the resources validate on every scheduler:
+        # the `DirectScheduler` (and any computer without a `default_mpiprocs_per_machine`) requires at least two of
+        # `num_machines` / `num_mpiprocs_per_machine` / `tot_num_mpiprocs`.
+        options = {
+            'resources': {'num_machines': 1, 'num_mpiprocs_per_machine': 1},
+            'withmpi': False,
+            'max_wallclock_seconds': 3600,
+        }
 
     builder = workchain.get_builder_from_protocol(
         pw_code=pw_code,
@@ -245,6 +252,10 @@ def main():
         '--metal', action='store_true', help='treat the system as a metal (smearing) instead of an insulator'
     )
     parser.add_argument('--submit', action='store_true', help='submit to the daemon instead of running in-process')
+    parser.add_argument('--num-machines', type=int, default=1, help='number of machines (nodes) per calculation')
+    parser.add_argument('--mpiprocs', type=int, default=1, help='number of MPI processes per machine')
+    parser.add_argument('--with-mpi', action='store_true', help='run the codes with MPI')
+    parser.add_argument('--max-wallclock', type=int, default=3600, help='wall-clock limit per calculation, in seconds')
     args = parser.parse_args()
 
     load_profile()
@@ -255,6 +266,13 @@ def main():
     if pseudo_family is None and args.file is None:
         pseudo_family = 'oncv_si_test'
 
+    # Give both `num_machines` and `num_mpiprocs_per_machine` so the resources validate on every scheduler.
+    options = {
+        'resources': {'num_machines': args.num_machines, 'num_mpiprocs_per_machine': args.mpiprocs},
+        'withmpi': args.with_mpi,
+        'max_wallclock_seconds': args.max_wallclock,
+    }
+
     results, node = characterize(
         atoms,
         pw_code=args.pw_code,
@@ -264,6 +282,7 @@ def main():
         spin_orbit_coupling=args.soc,
         relax=args.relax,
         electronic_type=ElectronicType.METAL if args.metal else ElectronicType.INSULATOR,
+        options=options,
         submit_to_daemon=args.submit,
     )
 
