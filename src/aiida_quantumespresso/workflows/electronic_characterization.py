@@ -48,8 +48,13 @@ EpsilonCalculation = plugins.CalculationFactory('quantumespresso.epsilon')
 
 def validate_inputs(value, _):
     """Validate the top level namespace."""
-    if 'nbands_factor' in value and 'nbnd' in value['bands']['pw']['parameters'].base.attributes.get('SYSTEM', {}):
-        return 'Cannot specify both `nbands_factor` and `bands.pw.parameters.SYSTEM.nbnd`.'
+    # `nbands_factor` governs the empty bands of both the bands run and the optical NSCF, so it cannot coexist with an
+    # explicit `nbnd` on either (which it would otherwise silently overwrite). This mirrors the `PwBandsWorkChain` and
+    # `ScfNscfWorkChain` checks; to set `nbnd` by hand, do not also pass `nbands_factor`.
+    if 'nbands_factor' in value:
+        for namespace in ('bands', 'nscf'):
+            if 'nbnd' in value[namespace]['pw']['parameters'].base.attributes.get('SYSTEM', {}):
+                return f'Cannot specify both `nbands_factor` and `{namespace}.pw.parameters.SYSTEM.nbnd`.'
 
     if all(key in value for key in ('bands_kpoints', 'bands_kpoints_distance')):
         return 'Cannot specify both `bands_kpoints` and `bands_kpoints_distance`.'

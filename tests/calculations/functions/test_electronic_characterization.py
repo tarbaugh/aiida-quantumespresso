@@ -162,3 +162,24 @@ def test_band_gap_spin_orbit_counts_one_electron_per_band():
     # 8 electrons, one per band -> 8 occupied bands (a scalar calculation would have found 4).
     assert result['number_of_occupied_bands'] == 8
     assert result['fundamental_gap'] == pytest.approx(1.5)  # empty min 1.0 - occupied max -0.5
+
+
+def test_band_gap_collinear_spin_counts_one_electron_per_channel():
+    """A collinear spin-polarized (nspin=2, 3-D bands) structure counts one electron per spin band, not two."""
+    n_kpoints = 8
+    kpoints = np.zeros((n_kpoints, 3))
+    kpoints[:, 0] = np.linspace(0.0, 0.5, n_kpoints)
+    # Five bands per spin channel; identical up and down channels -> a (2, n_kpoints, 5) array.
+    per_spin = np.tile(np.array([-8.0, -6.0, -4.0, -2.0, 1.5]), (n_kpoints, 1))
+    bands = np.stack([per_spin, per_spin])
+
+    bands_data = orm.BandsData()
+    bands_data.set_kpoints(kpoints)
+    bands_data.set_bands(bands, units='eV')
+
+    result = analyze_band_structure(bands_data, orm.Dict({'number_of_electrons': 8})).get_dict()
+    # 8 electrons, one per (spin) band -> 8 occupied of the 10 stacked columns (counting two per band would find 4
+    # and wrongly place the VBM/CBM inside the valence manifold, reporting a metal).
+    assert result['number_of_occupied_bands'] == 8
+    assert result['is_insulator'] is True
+    assert result['fundamental_gap'] == pytest.approx(3.5)  # empty min 1.5 - occupied max -2.0

@@ -61,13 +61,18 @@ def analyze_band_structure(band_structure, parameters):
     number_of_electrons = inputs['number_of_electrons']
     noncollinear = bool(inputs.get('spin_orbit_coupling') or inputs.get('non_colinear_calculation'))
 
-    bands = _stack_spin_channels(band_structure.get_bands())
+    raw_bands = band_structure.get_bands()
+    # Collinear spin-polarized (`nspin = 2`) band structures come back as `(2, n_kpoints, n_bands)`; the two spin
+    # channels then each hold one electron per band, just like a noncollinear (spinor) calculation.
+    collinear = np.asarray(raw_bands).ndim == 3
+    bands = _stack_spin_channels(raw_bands)
     bands = np.sort(bands, axis=1)  # ascending in energy at each k-point, so the lowest bands are the occupied ones
     kpoints = band_structure.get_kpoints()
     labels = band_structure.labels or []
 
-    # One electron per band for noncollinear/spin-orbit calculations, two (spin degeneracy) otherwise.
-    electrons_per_band = 1 if noncollinear else 2
+    # Two electrons per band only for a non-polarized calculation (spin degeneracy); one electron per band for
+    # noncollinear/spin-orbit spinor bands and for each channel of a collinear spin-polarized calculation.
+    electrons_per_band = 1 if (noncollinear or collinear) else 2
     n_occupied = int(round(number_of_electrons / electrons_per_band))
 
     if n_occupied <= 0 or n_occupied >= bands.shape[1]:

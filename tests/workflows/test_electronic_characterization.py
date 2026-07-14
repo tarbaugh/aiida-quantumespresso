@@ -1,5 +1,25 @@
 """Tests for the `ElectronicCharacterizationWorkChain` class."""
 
+from aiida import orm
+
+from aiida_quantumespresso.workflows.electronic_characterization import validate_inputs
+
+
+def test_validate_inputs_rejects_nbnd_with_nbands_factor():
+    """`nbands_factor` cannot coexist with an explicit `nbnd` on either the bands or the optical NSCF branch."""
+    base = {
+        'nbands_factor': orm.Float(3.0),
+        'bands': {'pw': {'parameters': orm.Dict({'SYSTEM': {}})}},
+        'nscf': {'pw': {'parameters': orm.Dict({'SYSTEM': {}})}},
+    }
+    assert validate_inputs(base, None) is None
+
+    nscf_conflict = {**base, 'nscf': {'pw': {'parameters': orm.Dict({'SYSTEM': {'nbnd': 40}})}}}
+    assert 'nscf.pw.parameters.SYSTEM.nbnd' in validate_inputs(nscf_conflict, None)
+
+    bands_conflict = {**base, 'bands': {'pw': {'parameters': orm.Dict({'SYSTEM': {'nbnd': 40}})}}}
+    assert 'bands.pw.parameters.SYSTEM.nbnd' in validate_inputs(bands_conflict, None)
+
 
 def test_default(generate_workchain_electronic_characterization, fixture_localhost, generate_remote_data):
     """Drive the outline of the work chain in dry-run mode and check the shared-SCF branching."""
