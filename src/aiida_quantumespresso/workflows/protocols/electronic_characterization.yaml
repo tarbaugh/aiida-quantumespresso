@@ -1,0 +1,43 @@
+# The relaxation and optical presets live in the protocols of the sub work chains (`pw.relax` and `epsilon`) and are
+# selected at the same protocol level (fast/balanced/stringent); the `relax` and `optical` keys below only carry
+# deltas. This protocol mainly fixes the SCF and bands `CONTROL.calculation` flags and the empty-band factor.
+default_inputs:
+    clean_workdir: False
+    nbands_factor: 3.0
+    scf:
+        pw:
+            parameters:
+                CONTROL:
+                    calculation: scf
+                    restart_mode: from_scratch
+    bands:
+        pw:
+            parameters:
+                CONTROL:
+                    calculation: bands
+                    restart_mode: from_scratch
+    relax: {}
+    optical: {}
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to characterize the electronic structure and optics at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to characterize the electronic structure and optics at high precision at higher computational cost.'
+        nbands_factor: 4.0
+    fast:
+        description: 'Protocol to characterize the electronic structure and optics at low precision at minimal computational cost for testing purposes.'
+# List of "meta inputs", which are not direct inputs of the process. Used for validation of the overrides.
+meta_inputs_schema:
+    scf: &pw_base_meta
+        meta_parameters:
+            conv_thr_per_atom:
+            etot_conv_thr_per_atom:
+        pseudo_family:
+    bands: *pw_base_meta
+    optical:
+        scf: *pw_base_meta
+        nscf: *pw_base_meta
+    relax:
+        base_relax: *pw_base_meta
+        base_init_relax: *pw_base_meta

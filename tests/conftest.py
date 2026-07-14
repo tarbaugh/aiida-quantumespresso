@@ -1517,3 +1517,57 @@ def generate_workchain_thermal_conductivity(
         return generate_workchain('quantumespresso.thermal_conductivity', inputs)
 
     return _generate_workchain_thermal_conductivity
+
+
+@pytest.fixture
+def generate_workchain_electronic_characterization(generate_workchain, generate_inputs_pw, fixture_code):
+    """Generate an instance of an `ElectronicCharacterizationWorkChain`."""
+
+    def _generate_workchain_electronic_characterization(spin_orbit_coupling=False, with_bands_kpoints=True):
+        from aiida.orm import Bool, Dict
+
+        from aiida_quantumespresso.utils.resources import get_default_options
+
+        entry_point = 'quantumespresso.electronic_characterization'
+
+        scf_pw_inputs = generate_inputs_pw()
+        kpoints = scf_pw_inputs.pop('kpoints')
+        structure = scf_pw_inputs.pop('structure')
+        scf = {'pw': scf_pw_inputs, 'kpoints': kpoints}
+
+        bands_pw_inputs = generate_inputs_pw()
+        bands_pw_inputs.pop('kpoints')
+        bands_pw_inputs.pop('structure')
+        bands_pw_inputs['parameters']['CONTROL']['calculation'] = 'bands'
+        bands = {'pw': bands_pw_inputs}
+
+        nscf_pw_inputs = generate_inputs_pw()
+        nscf_pw_inputs.pop('kpoints')
+        nscf_pw_inputs.pop('structure')
+        nscf_pw_inputs['parameters']['CONTROL']['calculation'] = 'nscf'
+        # epsilon.x performs no symmetry expansion of the k-points, so the optical NSCF must cover the full BZ.
+        nscf_pw_inputs['parameters']['SYSTEM']['nosym'] = True
+        nscf_pw_inputs['parameters']['SYSTEM']['noinv'] = True
+        nscf = {'pw': nscf_pw_inputs, 'kpoints': kpoints}
+
+        epsilon = {
+            'code': fixture_code('quantumespresso.epsilon'),
+            'parameters': Dict({'ENERGY_GRID': {'wmax': 20.0, 'nw': 500}}),
+            'metadata': {'options': get_default_options()},
+        }
+
+        inputs = {
+            'structure': structure,
+            'spin_orbit_coupling': Bool(spin_orbit_coupling),
+            'scf': scf,
+            'bands': bands,
+            'nscf': nscf,
+            'epsilon': epsilon,
+            'dry_run': Bool(True),
+        }
+        if with_bands_kpoints:
+            inputs['bands_kpoints'] = kpoints
+
+        return generate_workchain(entry_point, inputs)
+
+    return _generate_workchain_electronic_characterization
