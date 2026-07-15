@@ -59,6 +59,26 @@ def pseudo_overrides(pseudo_family: str, *, relax: bool) -> dict:
     return overrides
 
 
+def _apply_parallelization(builder, *, npool, ndiag, relax):
+    """Set the ``pw.x`` command-line parallelization flags (``-nk`` / ``-ndiag``) on every pw.x step of the builder."""
+    cmdline = []
+    if npool is not None:
+        cmdline += ['-nk', str(npool)]
+    if ndiag is not None:
+        cmdline += ['-ndiag', str(ndiag)]
+    if not cmdline:
+        return
+
+    pw_namespaces = [builder.scf, builder.bands, builder.nscf]  # SCF, bands and the optical NSCF
+    if relax:
+        pw_namespaces += [builder.relax.base_relax, builder.relax.base_init_relax]
+    for namespace in pw_namespaces:
+        try:
+            namespace.pw.settings = orm.Dict({'cmdline': list(cmdline)})
+        except AttributeError:
+            pass
+
+
 def characterize(
     atoms,
     *,
@@ -70,6 +90,8 @@ def characterize(
     relax: bool = True,
     electronic_type: ElectronicType = ElectronicType.INSULATOR,
     options: dict | None = None,
+    npool: int | None = None,
+    ndiag: int | None = None,
     submit_to_daemon: bool = False,
 ):
     """Build and run (or submit) an ``ElectronicCharacterizationWorkChain`` for an arbitrary ``ase.Atoms`` object.
@@ -89,6 +111,11 @@ def characterize(
         ``ElectronicType.METAL`` (smearing).
     :param options: the ``metadata.options`` for every ``CalcJob`` (resources, MPI, wall time). A serial single-node
         default is used if not given.
+    :param npool: the number of k-point pools (``pw.x -nk``). k-points parallelize almost perfectly, so for a
+        many-k-point NSCF set this as high as the cores/pool still needed for one k-point's FFTs allow.
+    :param ndiag: the size of the linear-algebra (subspace-diagonalization) group (``pw.x -ndiag``). Set to ``1`` to
+        diagonalize serially with LAPACK on each pool: this is dramatically faster than the distributed algorithm for
+        the modest matrices here when Quantum ESPRESSO was built without ScaLAPACK/ELPA.
     :param submit_to_daemon: submit to the daemon instead of running in the current process.
     :return: a ``(results, node)`` tuple (``results`` is ``None`` when submitting to the daemon).
     """
@@ -124,6 +151,8 @@ def characterize(
         overrides=pseudo_overrides(pseudo_family, relax=relax),
         options=options,
     )
+
+    _apply_parallelization(builder, npool=npool, ndiag=ndiag, relax=relax)
 
     if submit_to_daemon:
         node = submit(builder)
@@ -256,6 +285,13 @@ def main():
     parser.add_argument('--mpiprocs', type=int, default=1, help='number of MPI processes per machine')
     parser.add_argument('--with-mpi', action='store_true', help='run the codes with MPI')
     parser.add_argument('--max-wallclock', type=int, default=3600, help='wall-clock limit per calculation, in seconds')
+    parser.add_argument('--npool', type=int, default=None, help='number of k-point pools (pw.x -nk)')
+    parser.add_argument(
+        '--ndiag',
+        type=int,
+        default=None,
+        help='linear-algebra group size (pw.x -ndiag); use 1 to diagonalize serially, much faster without ScaLAPACK',
+    )
     args = parser.parse_args()
 
     load_profile()
@@ -283,6 +319,8 @@ def main():
         relax=args.relax,
         electronic_type=ElectronicType.METAL if args.metal else ElectronicType.INSULATOR,
         options=options,
+        npool=args.npool,
+        ndiag=args.ndiag,
         submit_to_daemon=args.submit,
     )
 
