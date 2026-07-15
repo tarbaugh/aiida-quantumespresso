@@ -165,8 +165,15 @@ def characterize(
     return results, node
 
 
-def report(results, node, *, spectra_filename: str = 'optical_spectra.dat', plot_filename: str = 'optical_spectra.png'):
-    """Print the derived properties of a finished characterization and save the optical spectra to disk."""
+def report(
+    results,
+    node,
+    *,
+    spectra_filename: str = 'optical_spectra.dat',
+    plot_filename: str = 'optical_spectra.png',
+    bands_filename: str = 'band_structure.png',
+):
+    """Print the derived properties of a finished characterization and save the band structure and optical spectra."""
     import numpy as np
 
     if not node.is_finished_ok:
@@ -216,11 +223,25 @@ def report(results, node, *, spectra_filename: str = 'optical_spectra.dat', plot
     np.savetxt(spectra_filename, data, header=header)
     print(f'\nsaved optical spectra to {spectra_filename}')
 
-    # The band structure lives in `results["band_structure"]` (a BandsData); export it e.g. with
-    #   verdi data core.bands export --format mpl_pdf <PK>
-    print(f'export the band structure with:  verdi data core.bands export {results["band_structure"].pk}')
-
+    _plot_band_structure(results['band_structure'], bands_filename)
     _plot_spectra(energy, sigma1, epsilon_2, gap, plot_filename)
+
+
+def _plot_band_structure(band_structure, bands_filename):
+    """Save a band-structure plot along the high-symmetry path (best effort).
+
+    Uses AiiDA's built-in matplotlib exporter, which handles the k-path distances, high-symmetry labels and path
+    discontinuities. The same plot is available from the command line with ``verdi data core.bands export``.
+    """
+    try:
+        import matplotlib
+
+        matplotlib.use('Agg')
+    except ImportError:
+        return
+
+    band_structure.export(bands_filename, fileformat='mpl_png', overwrite=True)
+    print(f'saved band structure to {bands_filename}  (BandsData<{band_structure.pk}>)')
 
 
 def _plot_spectra(energy, sigma1, epsilon_2, gap, plot_filename):
