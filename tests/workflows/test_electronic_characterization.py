@@ -72,3 +72,23 @@ def test_spin_orbit_coupling_flag(generate_workchain_electronic_characterization
     """The `spin_orbit_coupling` flag is propagated to the band-structure occupancy analysis."""
     workchain = generate_workchain_electronic_characterization(spin_orbit_coupling=True)
     assert workchain.inputs.spin_orbit_coupling.value is True
+
+
+def test_primitivize_before_relax(generate_workchain_electronic_characterization):
+    """The structure is primitivized before the relaxation, so a conventional cell is reduced up front.
+
+    Relaxing a conventional cell (or supercell) lets numerical noise break the symmetry, after which the post-relax
+    SeeK-path call can no longer reduce the cell and the whole characterization runs on a cell several times larger
+    than necessary.
+    """
+    from ase.build import bulk
+
+    workchain = generate_workchain_electronic_characterization(with_bands_kpoints=False)
+    assert workchain.setup() is None
+
+    # Emulate an input structure given as the 8-atom conventional cubic cell of diamond silicon.
+    workchain.ctx.current_structure = orm.StructureData(ase=bulk('Si', 'diamond', 5.43, cubic=True))
+    assert len(workchain.ctx.current_structure.sites) == 8
+
+    workchain.run_primitivize()
+    assert len(workchain.ctx.current_structure.sites) == 2

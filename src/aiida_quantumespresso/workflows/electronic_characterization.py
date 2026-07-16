@@ -5,7 +5,12 @@ smallest possible number of first-principles calculations. Two properties are of
 band structure and the optical conductivity -- and both are obtained from a *single* self-consistent ground-state
 calculation:
 
-1. an optional variable-cell relaxation (``pw.x``), to bring the structure to its equilibrium geometry;
+1. an optional variable-cell relaxation (``pw.x``), to bring the structure to its equilibrium geometry. The input
+   structure is primitivized with SeeK-path *before* it is relaxed: relaxing the primitive cell keeps the cost
+   minimal and preserves the crystal symmetry (``pw.x`` symmetrizes forces and stresses), whereas relaxing a
+   conventional cell or supercell -- where ``pw.x`` disables the fractional-translation symmetries -- lets numerical
+   noise accumulate in the positions, after which SeeK-path can no longer recognize the symmetry and every
+   subsequent calculation silently runs on a cell several times larger than necessary;
 2. one SCF calculation (``pw.x``), to converge the ground-state charge density; and, branching off that single
    charge density and running in parallel,
 3. a ``bands`` calculation (``pw.x``) along the high-symmetry k-point path returned by SeeK-path, from which the
@@ -162,6 +167,9 @@ class ElectronicCharacterizationWorkChain(CleanWorkdirMixin, ProtocolMixin, Work
         spec.outline(
             cls.setup,
             if_(cls.should_run_relax)(
+                if_(cls.should_run_seekpath)(
+                    cls.run_primitivize,
+                ),
                 cls.run_relax,
                 cls.inspect_relax,
             ),
@@ -327,6 +335,26 @@ class ElectronicCharacterizationWorkChain(CleanWorkdirMixin, ProtocolMixin, Work
     def should_run_relax(self):
         """Return whether the input structure should be relaxed first."""
         return 'relax' in self.inputs
+
+    def run_primitivize(self):
+        """Primitivize the input structure with SeeK-path before it is relaxed.
+
+        Relaxing the primitive cell instead of the cell as given keeps the cost minimal and, crucially, preserves
+        the crystal symmetry: ``pw.x`` finds and enforces the full point group of the primitive cell, symmetrizing
+        the forces and stresses, so the relaxed structure stays exactly on the symmetry manifold. In a conventional
+        cell or supercell setting ``pw.x`` disables the fractional-translation symmetries ("This is a supercell"),
+        the forces are then only partially symmetrized, and the relaxed positions pick up numerical noise that
+        afterwards prevents SeeK-path from recognizing the symmetry: the post-relax SeeK-path call would return the
+        unreduced (P1) cell and every subsequent calculation would silently run on a cell several times larger than
+        necessary, with a correspondingly larger full-Brillouin-zone k-point set for the optical NSCF.
+        """
+        result = seekpath_structure_analysis(self.ctx.current_structure, metadata={'call_link_label': 'primitivize'})
+        sites_before = len(self.ctx.current_structure.sites)
+        self.ctx.current_structure = result['primitive_structure']
+        self.report(
+            f'primitivized the structure with SeeK-path before the relaxation: '
+            f'{sites_before} -> {len(self.ctx.current_structure.sites)} sites'
+        )
 
     def run_relax(self):
         """Run the `PwRelaxWorkChain` to bring the structure to its equilibrium geometry."""
