@@ -23,6 +23,17 @@ class EpsilonParser(BaseParser):
         ('intsmear_epsilon_imag', '_IEPS_FILENAME'),
     )
 
+    # epsilon.x writes its data rows with the Fortran format ``(10f15.9)``. For a metallic system the intraband
+    # (Drude) contribution to ``epsilon_1`` diverges as ``omega -> 0``, overflowing the 15-character field at the
+    # lowest energies, which Fortran renders as a run of asterisks (adjacent overflowed fields merge into one run).
+    _OVERFLOW_FIELD_WIDTH = 15
+
+    @classmethod
+    def _replace_overflowed_fields(cls, content):
+        """Replace Fortran field-overflow asterisk runs with the corresponding number of ``NaN`` tokens."""
+        width = cls._OVERFLOW_FIELD_WIDTH
+        return re.sub(r'\*+', lambda match: ' nan' * max(1, round(len(match.group()) / width)), content)
+
     def parse(self, **kwargs):
         """Parse the retrieved files of a completed ``EpsilonCalculation`` into output nodes."""
         logs = get_logging_container()
@@ -49,7 +60,7 @@ class EpsilonParser(BaseParser):
             if filename not in retrieved_names:
                 return self.exit(self.exit_codes.ERROR_OUTPUT_FILES, logs)
 
-            content = self.retrieved.base.repository.get_object_content(filename)
+            content = self._replace_overflowed_fields(self.retrieved.base.repository.get_object_content(filename))
 
             try:
                 data = np.atleast_2d(np.genfromtxt(io.StringIO(content), comments='#'))

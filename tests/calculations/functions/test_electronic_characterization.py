@@ -183,3 +183,38 @@ def test_band_gap_collinear_spin_counts_one_electron_per_channel():
     assert result['number_of_occupied_bands'] == 8
     assert result['is_insulator'] is True
     assert result['fundamental_gap'] == pytest.approx(3.5)  # empty min 1.5 - occupied max -2.0
+
+
+def test_metallic_drude_divergence_handled():
+    """NaN values from the divergent metallic Drude region are skipped for the static descriptors and flagged.
+
+    For a metal, ``epsilon_1`` diverges as ``omega -> 0``; the overflowed values arrive from the parser as NaN in the
+    lowest-energy rows. The static descriptors must then be evaluated at the lowest finite energy, and the
+    ``has_intraband_divergence`` flag raised.
+    """
+    energy = np.linspace(0.001, 10.0, 400)
+    epsilon_1 = np.full_like(energy, 25.0)
+    epsilon_2 = lorentzian(energy, 3.0, 20.0, 0.5)
+    epsilon_1[0] = np.nan  # the overflowed Drude value at the lowest energy
+
+    result = compute_optical_properties(dielectric_function(energy, epsilon_1, epsilon_2))
+    parameters = result['optical_parameters'].get_dict()
+
+    assert parameters['has_intraband_divergence'] is True
+    # The static descriptors come from the second grid point, the lowest with finite values.
+    assert parameters['static_energy'] == pytest.approx(energy[1])
+    assert parameters['static_dielectric_constant_iso'] == pytest.approx(25.0)
+
+    # A fully finite (insulating) dielectric function does not raise the flag.
+    epsilon_1_fin = np.full_like(energy, 25.0)
+    finite = compute_optical_properties(dielectric_function(energy, epsilon_1_fin, epsilon_2))
+    assert finite['optical_parameters'].get_dict()['has_intraband_divergence'] is False
+
+
+def test_fully_nonfinite_dielectric_function_raises():
+    """A dielectric function with no finite rows at all is rejected with a clear error."""
+    energy = np.linspace(0.001, 1.0, 10)
+    with pytest.raises(ValueError, match='no energies with finite values'):
+        compute_optical_properties(
+            dielectric_function(energy, np.full_like(energy, np.nan), np.full_like(energy, np.nan))
+        )

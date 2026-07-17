@@ -105,16 +105,26 @@ def compute_optical_properties(dielectric_function):
         # The isotropic average over the three diagonal (Cartesian) components.
         optical_properties.set_array(f'{name}_iso', np.asarray(values).mean(axis=1))
 
-    # Scalar descriptors evaluated in the static (omega -> 0) limit, taken at the lowest available energy.
-    static_index = int(np.argmin(np.abs(energy)))
+    # For a metallic system the intraband (Drude) part of `epsilon_1` diverges as omega -> 0; the affected
+    # lowest-energy values overflow the fixed-width epsilon.x output and arrive here as NaN. The static descriptors
+    # are then evaluated at the lowest energy with finite values, and the divergence is flagged.
+    finite_rows = np.isfinite(epsilon_1).all(axis=1) & np.isfinite(epsilon_2).all(axis=1)
+    if not finite_rows.any():
+        raise ValueError('the dielectric function contains no energies with finite values.')
+    has_intraband_divergence = bool(~finite_rows.all())
+
+    # Scalar descriptors evaluated in the static (omega -> 0) limit, taken at the lowest finite energy. For a metal
+    # (`has_intraband_divergence`) they characterize the response just above the divergent Drude region.
+    finite_indices = np.flatnonzero(finite_rows)
+    static_index = int(finite_indices[np.argmin(np.abs(energy[finite_indices]))])
     epsilon_static = epsilon_1[static_index]
     static_dielectric_constant = epsilon_static.tolist()
     static_dielectric_constant_iso = float(np.mean(epsilon_static))
 
     # The absorption onset: the lowest energy at which the isotropic absorption rises above a small threshold.
     absorption_iso = spectra['absorption_coefficient'].mean(axis=1)
-    peak = absorption_iso.max()
-    onset_mask = absorption_iso > max(1.0e-3 * peak, 1.0e2)  # cm^-1
+    peak = np.nanmax(absorption_iso)
+    onset_mask = absorption_iso > max(1.0e-3 * peak, 1.0e2)  # cm^-1 (NaN compares False)
     absorption_onset = float(energy[np.argmax(onset_mask)]) if onset_mask.any() else None
 
     optical_parameters = Dict(
@@ -122,6 +132,8 @@ def compute_optical_properties(dielectric_function):
             'static_dielectric_constant': static_dielectric_constant,
             'static_dielectric_constant_iso': static_dielectric_constant_iso,
             'static_refractive_index_iso': float(np.sqrt(max(static_dielectric_constant_iso, 0.0))),
+            'static_energy': float(energy[static_index]),
+            'has_intraband_divergence': has_intraband_divergence,
             'absorption_onset': absorption_onset,
             'energy_units': 'eV',
             'units': {

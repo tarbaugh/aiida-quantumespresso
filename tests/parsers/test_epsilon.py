@@ -1,6 +1,7 @@
 """Tests for the :class:`aiida_quantumespresso.parsers.epsilon.EpsilonParser` class."""
 
 import numpy as np
+import pytest
 from aiida import orm
 
 
@@ -60,3 +61,24 @@ def test_epsilon_failed_invalid_format(fixture_localhost, generate_parser, gener
     assert calcfunction.is_finished, calcfunction.exception
     assert calcfunction.is_failed, calcfunction.exit_status
     assert calcfunction.exit_status == node.process_class.exit_codes.ERROR_OUTPUT_FILES_INVALID_FORMAT.status
+
+
+def test_epsilon_metallic_overflow(fixture_localhost, generate_parser, generate_calc_job_node):
+    """Test parsing a metallic ``EpsilonCalculation`` whose divergent Drude ``epsilon_1`` overflows the field width.
+
+    For metals the intraband contribution to ``epsilon_1`` diverges as ``omega -> 0``; epsilon.x writes its rows with
+    the fixed-width format ``(10f15.9)``, so the affected values print as runs of asterisks (adjacent overflowed
+    fields merge). The parser must convert them to ``NaN`` instead of failing.
+    """
+    node = generate_calc_job_node('quantumespresso.epsilon', fixture_localhost, 'metallic')
+    parser = generate_parser('quantumespresso.epsilon')
+    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
+
+    assert calcfunction.is_finished_ok, calcfunction.exit_message
+
+    epsilon_real = results['output_epsilon'].get_array('epsilon_real')
+    # The overflowed x and y fields of the first row become NaN; the finite z value survives.
+    assert np.isnan(epsilon_real[0, 0]) and np.isnan(epsilon_real[0, 1])
+    assert epsilon_real[0, 2] == pytest.approx(8754.186935426)
+    # Every other row is fully finite.
+    assert np.isfinite(epsilon_real[1:]).all()
