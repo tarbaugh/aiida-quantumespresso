@@ -234,15 +234,17 @@ def report(
     np.savetxt(spectra_filename, data, header=header)
     print(f'\nsaved optical spectra to {spectra_filename}')
 
-    _plot_band_structure(results['band_structure'], bands_filename)
+    _plot_band_structure(results['band_structure'], bands_filename, gap)
     _plot_spectra(energy, sigma1, epsilon_2, gap, plot_filename)
 
 
-def _plot_band_structure(band_structure, bands_filename):
+def _plot_band_structure(band_structure, bands_filename, gap=None):
     """Save a band-structure plot along the high-symmetry path (best effort).
 
     Uses AiiDA's built-in matplotlib exporter, which handles the k-path distances, high-symmetry labels and path
-    discontinuities. The same plot is available from the command line with ``verdi data core.bands export``.
+    discontinuities. When the band-edge energies are known, the energy axis is windowed around them, so that deep
+    semicore bands do not squash the physically interesting region. The same plot is available from the command line
+    with ``verdi data core.bands export``.
     """
     try:
         import matplotlib
@@ -251,7 +253,11 @@ def _plot_band_structure(band_structure, bands_filename):
     except ImportError:
         return
 
-    band_structure.export(bands_filename, fileformat='mpl_png', overwrite=True)
+    window = {}
+    if gap and 'valence_band_maximum' in gap and 'conduction_band_minimum' in gap:
+        window = {'y_min_lim': gap['valence_band_maximum'] - 8.0, 'y_max_lim': gap['conduction_band_minimum'] + 8.0}
+
+    band_structure.export(bands_filename, fileformat='mpl_png', overwrite=True, **window)
     print(f'saved band structure to {bands_filename}  (BandsData<{band_structure.pk}>)')
 
 
