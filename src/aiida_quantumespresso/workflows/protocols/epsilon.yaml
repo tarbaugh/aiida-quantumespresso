@@ -18,6 +18,12 @@ default_inputs:
                     # Brillouin zone with a uniform, unshifted grid.
                     nosym: True
                     noinv: True
+                ELECTRONS:
+                    # A fixed-potential calculation with many empty bands starts from (mostly random) trial
+                    # wavefunctions, for which the Davidson subspace overlap can turn numerically non-positive-definite
+                    # on semicore-heavy systems ("cdiaghg: S matrix not positive definite", a hard crash that not even
+                    # the error handlers can always catch). ParO is robust to this and comparably fast for many bands.
+                    diagonalization: paro
     epsilon:
         parameters:
             ENERGY_GRID:

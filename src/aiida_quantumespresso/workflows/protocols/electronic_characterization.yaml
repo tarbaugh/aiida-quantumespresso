@@ -16,6 +16,10 @@ default_inputs:
                 CONTROL:
                     calculation: bands
                     restart_mode: from_scratch
+                ELECTRONS:
+                    # Same rationale as the optical NSCF (see `epsilon.yaml`): the fixed-potential bands run with many
+                    # empty bands can hard-crash the Davidson solver on semicore-heavy systems; ParO is robust.
+                    diagonalization: paro
     relax: {}
     optical: {}
 default_protocol: balanced

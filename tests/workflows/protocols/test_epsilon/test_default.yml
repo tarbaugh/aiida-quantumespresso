@@ -38,6 +38,7 @@ nscf:
         tstress: true
       ELECTRONS:
         conv_thr: 4.0e-10
+        diagonalization: paro
         electron_maxstep: 80
         mixing_beta: 0.4
       SYSTEM:
