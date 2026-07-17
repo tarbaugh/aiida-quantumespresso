@@ -59,24 +59,34 @@ def pseudo_overrides(pseudo_family: str, *, relax: bool) -> dict:
     return overrides
 
 
-def _apply_parallelization(builder, *, npool, ndiag, relax):
-    """Set the ``pw.x`` command-line parallelization flags (``-nk`` / ``-ndiag``) on every pw.x step of the builder."""
+def _apply_parallelization(builder, *, npool, ndiag, relax, epsilon_mpiprocs=None):
+    """Set the pw.x parallelization flags (``-nk`` / ``-ndiag``) and cap the epsilon.x MPI size.
+
+    epsilon.x has no k-point pool parallelism: every MPI rank joins a single plane-wave group, so running it with
+    the full rank count sized for the pooled pw.x steps can exceed the number of FFT planes of a small cell and
+    abort immediately. ``epsilon_mpiprocs`` therefore gives epsilon.x its own (much smaller) MPI size.
+    """
     cmdline = []
     if npool is not None:
         cmdline += ['-nk', str(npool)]
     if ndiag is not None:
         cmdline += ['-ndiag', str(ndiag)]
-    if not cmdline:
-        return
 
-    pw_namespaces = [builder.scf, builder.bands, builder.nscf]  # SCF, bands and the optical NSCF
-    if relax:
-        pw_namespaces += [builder.relax.base_relax, builder.relax.base_init_relax]
-    for namespace in pw_namespaces:
-        try:
-            namespace.pw.settings = orm.Dict({'cmdline': list(cmdline)})
-        except AttributeError:
-            pass
+    if cmdline:
+        pw_namespaces = [builder.scf, builder.bands, builder.nscf]  # SCF, bands and the optical NSCF
+        if relax:
+            pw_namespaces += [builder.relax.base_relax, builder.relax.base_init_relax]
+        for namespace in pw_namespaces:
+            try:
+                namespace.pw.settings = orm.Dict({'cmdline': list(cmdline)})
+            except AttributeError:
+                pass
+
+    if epsilon_mpiprocs is not None:
+        builder.epsilon.metadata.options.resources = {
+            'num_machines': 1,
+            'num_mpiprocs_per_machine': epsilon_mpiprocs,
+        }
 
 
 def characterize(
@@ -92,6 +102,7 @@ def characterize(
     options: dict | None = None,
     npool: int | None = None,
     ndiag: int | None = None,
+    epsilon_mpiprocs: int | None = None,
     submit_to_daemon: bool = False,
 ):
     """Build and run (or submit) an ``ElectronicCharacterizationWorkChain`` for an arbitrary ``ase.Atoms`` object.
@@ -152,7 +163,7 @@ def characterize(
         options=options,
     )
 
-    _apply_parallelization(builder, npool=npool, ndiag=ndiag, relax=relax)
+    _apply_parallelization(builder, npool=npool, ndiag=ndiag, relax=relax, epsilon_mpiprocs=epsilon_mpiprocs)
 
     if submit_to_daemon:
         node = submit(builder)
@@ -313,6 +324,13 @@ def main():
         default=None,
         help='linear-algebra group size (pw.x -ndiag); use 1 to diagonalize serially, much faster without ScaLAPACK',
     )
+    parser.add_argument(
+        '--epsilon-mpiprocs',
+        type=int,
+        default=None,
+        help='MPI processes for epsilon.x only (it has no k-point pools, so a small count, e.g. 8, avoids exceeding '
+        'the FFT planes of a small cell)',
+    )
     args = parser.parse_args()
 
     load_profile()
@@ -342,6 +360,7 @@ def main():
         options=options,
         npool=args.npool,
         ndiag=args.ndiag,
+        epsilon_mpiprocs=args.epsilon_mpiprocs,
         submit_to_daemon=args.submit,
     )
 
