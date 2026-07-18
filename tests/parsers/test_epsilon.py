@@ -64,11 +64,12 @@ def test_epsilon_failed_invalid_format(fixture_localhost, generate_parser, gener
 
 
 def test_epsilon_metallic_overflow(fixture_localhost, generate_parser, generate_calc_job_node):
-    """Test parsing a metallic ``EpsilonCalculation`` whose divergent Drude ``epsilon_1`` overflows the field width.
+    """Test parsing a metallic ``EpsilonCalculation`` with the fixed-width artifacts of a divergent ``epsilon_1``.
 
-    For metals the intraband contribution to ``epsilon_1`` diverges as ``omega -> 0``; epsilon.x writes its rows with
-    the fixed-width format ``(10f15.9)``, so the affected values print as runs of asterisks (adjacent overflowed
-    fields merge). The parser must convert them to ``NaN`` instead of failing.
+    epsilon.x writes its rows with the fixed-width format ``(10f15.9)``. For metals the intraband contribution to
+    ``epsilon_1`` diverges as ``omega -> 0``, producing values that overflow their field entirely (printed as runs of
+    asterisks, adjacent overflowed fields merging) as well as 15-character values (e.g. ``-1111.449088394``) that
+    exactly fill their field and merge with the preceding column. The parser must handle both.
     """
     node = generate_calc_job_node('quantumespresso.epsilon', fixture_localhost, 'metallic')
     parser = generate_parser('quantumespresso.epsilon')
@@ -80,5 +81,7 @@ def test_epsilon_metallic_overflow(fixture_localhost, generate_parser, generate_
     # The overflowed x and y fields of the first row become NaN; the finite z value survives.
     assert np.isnan(epsilon_real[0, 0]) and np.isnan(epsilon_real[0, 1])
     assert epsilon_real[0, 2] == pytest.approx(8754.186935426)
+    # The second row has a full-width z value that merged with the y column in the raw file.
+    assert epsilon_real[1] == pytest.approx([-746.732902223, -746.732904016, -1111.449088394])
     # Every other row is fully finite.
     assert np.isfinite(epsilon_real[1:]).all()
